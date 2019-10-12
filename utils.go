@@ -1,17 +1,17 @@
-package core
+package main
 
 import "sync"
 
 // The listener for the EventListener
 type Listener struct {
 	Filter func(interface{}) bool // The filter to run to check whether to execute the action
-	Action func(interface{}) // The function to run otherwise
+	Action func(interface{})      // The function to run otherwise
 }
 
 // The event listener consumes the channel, so it should not be used in parallel
 type EventListener struct {
-	Channel chan interface{}
-	Listeners []Listener
+	Channel    chan interface{}
+	Listeners  []Listener
 	WaitingFor sync.Map
 }
 
@@ -24,7 +24,7 @@ func (e EventListener) StartListener() {
 			}
 		}
 		e.WaitingFor.Range(func(filter, action interface{}) bool {
-			if (filter.(func(interface{}) bool)(v)) {
+			if filter.(func(interface{}) bool)(v) {
 				action.(chan interface{}) <- v
 				close(action.(chan interface{}))
 				e.WaitingFor.Delete(filter)
@@ -41,7 +41,7 @@ func (e *EventListener) AddListener(f Listener) {
 }
 
 // Returns a channel that returns the first item that satisfies the requirement
-func (e *EventListener) WaitFor(f func(interface{}) bool) <- chan interface{}{
+func (e *EventListener) WaitFor(f func(interface{}) bool) <-chan interface{} {
 	c := make(chan interface{})
 	e.WaitingFor.Store(f, c)
 	return c
@@ -49,7 +49,7 @@ func (e *EventListener) WaitFor(f func(interface{}) bool) <- chan interface{}{
 
 // Clears out the event listener when the channel closes
 func (e *EventListener) close() {
-	e.WaitingFor.Range(func (filter, action interface{}) bool {
+	e.WaitingFor.Range(func(filter, action interface{}) bool {
 		close(action.(chan interface{}))
 		e.WaitingFor.Delete(filter)
 		return true
