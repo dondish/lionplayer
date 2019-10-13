@@ -1,6 +1,8 @@
 package main
 
-import "sync"
+import (
+	"sync"
+)
 
 // The listener for the EventListener
 type Listener struct {
@@ -56,3 +58,12 @@ func (e *EventListener) close() {
 	})
 	e.Listeners = []Listener{}
 }
+
+//type SeekableBufferedReader struct {
+//	io.Reader
+//	buf bytes.Buffer
+//}
+//
+//func (s SeekableBufferedReader) Seek(offset int64, whence int) (int64, error) {
+//	s.buf.Truncate()
+//}

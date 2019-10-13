@@ -1,17 +1,17 @@
 package main
 
 import (
-	"encoding/binary"
+	"errors"
 	"flag"
 	"fmt"
-	"io"
+	"github.com/bwmarrin/discordgo"
+	"github.com/ebml-go/webm"
+	"github.com/jeffallen/seekinghttp"
 	"os"
 	"os/signal"
 	"strings"
 	"syscall"
 	"time"
-
-	"github.com/bwmarrin/discordgo"
 )
 
 func init() {
@@ -20,20 +20,10 @@ func init() {
 }
 
 var token string
-var buffer = make([][]byte, 0)
 
 func main() {
-	println(Open("https://r5---sn-m4vox-ua8e.googlevideo.com/videoplayback?expire=1570918812&ei=PP2hXZTTDYSGmLAPhK-CkAI&ip=2a02%3Aed0%3A424d%3A8a00%3A2a25%3A5666%3Ac316%3A8bbc&id=o-ANynoKvm8E8gMKE-ZjgDJEjjEYhQUwiRWl8-AeM3jyoP&itag=251&source=youtube&requiressl=yes&mm=31%2C29&mn=sn-m4vox-ua8e%2Csn-4g5e6ne6&ms=au%2Crdu&mv=m&mvi=4&pl=43&gcr=il&initcwndbps=813750&mime=audio%2Fwebm&gir=yes&clen=3929800&dur=245.321&lmt=1567949627960955&mt=1570897065&fvip=6&keepalive=yes&fexp=23842630&c=WEB&txp=1311222&sparams=expire%2Cei%2Cip%2Cid%2Citag%2Csource%2Crequiressl%2Cgcr%2Cmime%2Cgir%2Cclen%2Cdur%2Clmt&lsparams=mm%2Cmn%2Cms%2Cmv%2Cmvi%2Cpl%2Cinitcwndbps&lsig=AHylml4wRgIhAPViLT30JgHZnXF9LQv1Kg2_ae6Z0snhXR_4s2i9CzDhAiEA3-VITHFSVQpiplsAUye86_y7TlF5FltxX10sshgswas%3D&lmt=1567949627960955&audio_sample_rate=48000&bitrate=142201&itag=251"))
 	if token == "" {
 		fmt.Println("No token provided. Please run: airhorn -t <bot token>")
-		return
-	}
-
-	// Load the sound file.
-	err := loadSound()
-	if err != nil {
-		fmt.Println("Error loading sound: ", err)
-		fmt.Println("Please copy $GOPATH/src/github.com/bwmarrin/examples/airhorn/airhorn.dca to this directory.")
 		return
 	}
 
@@ -135,48 +125,6 @@ func guildCreate(s *discordgo.Session, event *discordgo.GuildCreate) {
 }
 
 // loadSound attempts to load an encoded sound file from disk.
-func loadSound() error {
-
-	file, err := os.Open("airhorn.dca")
-	if err != nil {
-		fmt.Println("Error opening dca file :", err)
-		return err
-	}
-
-	var opuslen int16
-
-	for {
-		// Read opus frame length from dca file.
-		err = binary.Read(file, binary.LittleEndian, &opuslen)
-
-		// If this is the end of the file, just return.
-		if err == io.EOF || err == io.ErrUnexpectedEOF {
-			err := file.Close()
-			if err != nil {
-				return err
-			}
-			return nil
-		}
-
-		if err != nil {
-			fmt.Println("Error reading from dca file :", err)
-			return err
-		}
-
-		// Read encoded pcm from dca file.
-		InBuf := make([]byte, opuslen)
-		err = binary.Read(file, binary.LittleEndian, &InBuf)
-
-		// Should not be any end of file errors
-		if err != nil {
-			fmt.Println("Error reading from dca file :", err)
-			return err
-		}
-
-		// Append encoded pcm data to the buffer.
-		buffer = append(buffer, InBuf)
-	}
-}
 
 // playSound plays the current buffer to the provided channel.
 func playSound(s *discordgo.Session, guildID, channelID string) (err error) {
@@ -193,9 +141,44 @@ func playSound(s *discordgo.Session, guildID, channelID string) (err error) {
 	// Start speaking.
 	vc.Speaking(true)
 
-	// Send the buffer data.
-	for _, buff := range buffer {
-		vc.OpusSend <- buff
+	ytsrc := NewYoutubeSource()
+	track, err := ytsrc.PlayVideo("VMtarj8Ua0s")
+	if err != nil {
+		return err
+	}
+
+	url, err := track.Format.GetValidUrl()
+	if err != nil {
+		return err
+	}
+
+	res := seekinghttp.New(url)
+	res.Client = &ytsrc.client
+
+	if size, err := res.Size(); err != nil {
+		return err
+	} else if size == 0 {
+		return errors.New("got an empty request")
+	}
+	var m webm.WebM
+
+	file, err := webm.Parse(res, &m)
+
+	if err != nil {
+		return err
+	}
+
+	for {
+		packet, ok := <-file.Chan
+
+		// If this is the end of the file, just return.
+		if !ok {
+			file.Shutdown()
+			break
+		}
+
+		// Append encoded pcm data to the buffer.
+		vc.OpusSend <- packet.Data
 	}
 
 	// Stop speaking
