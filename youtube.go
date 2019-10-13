@@ -64,6 +64,9 @@ func compileAndExtract(pattern, body string) (string, error) {
 }
 
 func (ytfmt *YoutubeFormat) GetValidUrl() (string, error) {
+	if ytfmt.Signature == "" {
+		return ytfmt.Url, nil
+	}
 	cache, ok := cipherCache.Load(ytfmt.PlayerScript)
 	if ok {
 		return cache.(string), nil

@@ -142,7 +142,7 @@ func playSound(s *discordgo.Session, guildID, channelID string) (err error) {
 	vc.Speaking(true)
 
 	ytsrc := NewYoutubeSource()
-	track, err := ytsrc.PlayVideo("VMtarj8Ua0s")
+	track, err := ytsrc.PlayVideo("cT3wbp17Ano")
 	if err != nil {
 		return err
 	}
