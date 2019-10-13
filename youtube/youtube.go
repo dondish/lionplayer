@@ -1,4 +1,4 @@
-package main
+package youtube
 
 import (
 	"encoding/json"
@@ -177,11 +177,11 @@ type YoutubeTrack struct {
 }
 
 type YoutubeSource struct {
-	client http.Client
+	Client http.Client
 }
 
 func NewYoutubeSource() *YoutubeSource {
-	return &YoutubeSource{client: http.Client{}}
+	return &YoutubeSource{Client: http.Client{}}
 }
 
 // Currently supports only audio/webm with the opus codec.
@@ -229,7 +229,7 @@ func (yt YoutubeSource) PlayVideo(videoId string) (*YoutubeTrack, error) {
 	req.Header.Add("User-Agent", "lionPlayer v0.1")
 	req.Header.Add("X-YouTube-Client-Name", "1")
 	req.Header.Add("X-YouTube-Client-Version", "2.20191008.04.01")
-	res, err := yt.client.Do(req)
+	res, err := yt.Client.Do(req)
 	if err != nil {
 		return nil, err
 	}

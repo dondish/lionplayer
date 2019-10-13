@@ -7,6 +7,7 @@ import (
 	"github.com/bwmarrin/discordgo"
 	"github.com/ebml-go/webm"
 	"github.com/jeffallen/seekinghttp"
+	"lionPlayer/youtube"
 	"os"
 	"os/signal"
 	"strings"
@@ -141,8 +142,8 @@ func playSound(s *discordgo.Session, guildID, channelID string) (err error) {
 	// Start speaking.
 	vc.Speaking(true)
 
-	ytsrc := NewYoutubeSource()
-	track, err := ytsrc.PlayVideo("cT3wbp17Ano")
+	ytsrc := youtube.NewYoutubeSource()
+	track, err := ytsrc.PlayVideo("QeAy488CcC8")
 	if err != nil {
 		return err
 	}
@@ -153,7 +154,7 @@ func playSound(s *discordgo.Session, guildID, channelID string) (err error) {
 	}
 
 	res := seekinghttp.New(url)
-	res.Client = &ytsrc.client
+	res.Client = &ytsrc.Client
 
 	if size, err := res.Size(); err != nil {
 		return err
