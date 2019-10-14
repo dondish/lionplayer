@@ -5,7 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"github.com/bwmarrin/discordgo"
-	"github.com/ebml-go/webm"
+	webm2 "github.com/ebml-go/webm"
 	"github.com/jeffallen/seekinghttp"
 	"lionPlayer/youtube"
 	"os"
@@ -21,6 +21,8 @@ func init() {
 }
 
 var token string
+
+var ytsrc = youtube.NewYoutubeSource()
 
 func main() {
 	if token == "" {
@@ -79,12 +81,27 @@ func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 	}
 
 	// check if the message is "!airhorn"
-	if strings.HasPrefix(m.Content, "!airhorn") {
-
+	if strings.HasPrefix(m.Content, "!play") {
 		// Find the channel that the message came from.
 		c, err := s.State.Channel(m.ChannelID)
 		if err != nil {
 			// Could not find channel.
+			return
+		}
+
+		splut := strings.Split(m.Content, " ")
+		println(strings.Join(splut, ", "))
+		if len(splut) == 1 || !ytsrc.CheckVideoUrl(strings.TrimSpace(splut[1])) {
+			_, err := s.ChannelMessageSend(c.ID, "Please provide a correct url")
+			if err != nil {
+				return
+			}
+			return
+		}
+
+		videoId, err := ytsrc.ExtractVideoId(strings.TrimSpace(splut[1]))
+
+		if err != nil {
 			return
 		}
 
@@ -98,7 +115,7 @@ func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 		// Look for the message sender in that guild's current voice states.
 		for _, vs := range g.VoiceStates {
 			if vs.UserID == m.Author.ID {
-				err = playSound(s, g.ID, vs.ChannelID)
+				err = playSound(s, g.ID, vs.ChannelID, videoId)
 				if err != nil {
 					fmt.Println("Error playing sound:", err)
 				}
@@ -128,7 +145,7 @@ func guildCreate(s *discordgo.Session, event *discordgo.GuildCreate) {
 // loadSound attempts to load an encoded sound file from disk.
 
 // playSound plays the current buffer to the provided channel.
-func playSound(s *discordgo.Session, guildID, channelID string) (err error) {
+func playSound(s *discordgo.Session, guildID, channelID, videoId string) (err error) {
 
 	// Join the provided voice channel.
 	vc, err := s.ChannelVoiceJoin(guildID, channelID, false, true)
@@ -142,8 +159,7 @@ func playSound(s *discordgo.Session, guildID, channelID string) (err error) {
 	// Start speaking.
 	vc.Speaking(true)
 
-	ytsrc := youtube.NewYoutubeSource()
-	track, err := ytsrc.PlayVideo("QeAy488CcC8")
+	track, err := ytsrc.PlayVideo(videoId)
 	if err != nil {
 		return err
 	}
@@ -161,9 +177,9 @@ func playSound(s *discordgo.Session, guildID, channelID string) (err error) {
 	} else if size == 0 {
 		return errors.New("got an empty request")
 	}
-	var m webm.WebM
 
-	file, err := webm.Parse(res, &m)
+	var webm webm2.WebM
+	file, err := webm2.Parse(res, &webm)
 
 	if err != nil {
 		return err

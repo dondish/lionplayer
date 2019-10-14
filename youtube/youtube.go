@@ -63,6 +63,7 @@ func compileAndExtract(pattern, body string) (string, error) {
 	return strings.ReplaceAll(s[1], "$", "\\$"), nil
 }
 
+// Decipher the signature if exists to get the valid url.
 func (ytfmt *YoutubeFormat) GetValidUrl() (string, error) {
 	if ytfmt.Signature == "" {
 		return ytfmt.Url, nil
@@ -180,6 +181,7 @@ type YoutubeSource struct {
 	Client http.Client
 }
 
+// Create the YoutubeSource
 func NewYoutubeSource() *YoutubeSource {
 	return &YoutubeSource{Client: http.Client{}}
 }
@@ -195,7 +197,7 @@ func findBestFormat(args map[string]interface{}, js string) (*YoutubeFormat, err
 		if err != nil {
 			continue
 		}
-		if strings.HasPrefix(fomt.Get("type"), "video/") {
+		if strings.HasPrefix(fomt.Get("type"), "video/") || !strings.Contains(fomt.Get("type"), "webm") {
 			continue
 		}
 		if bitrate, err := strconv.Atoi(fomt.Get("bitrate")); err == nil && (bestformat == nil || int64(bitrate) > bestformat.Bitrate) {
@@ -221,6 +223,7 @@ func findBestFormat(args map[string]interface{}, js string) (*YoutubeFormat, err
 	return bestformat, nil
 }
 
+// Play a video by a video id
 func (yt YoutubeSource) PlayVideo(videoId string) (*YoutubeTrack, error) {
 	req, err := http.NewRequest("GET", strings.Join([]string{"https://www.youtube.com/watch?v=", videoId, "&pbj=1&hl=en"}, ""), nil)
 	if err != nil {
@@ -285,4 +288,28 @@ func (yt YoutubeSource) PlayVideo(videoId string) (*YoutubeTrack, error) {
 	} else {
 		return nil, errors.New("couldn't find the track")
 	}
+}
+
+var (
+	WatchUrl, _ = regexp.Compile("(?:https?://)?(?:www\\.)?(?:youtu\\.be/|youtube\\.com(?:/embed/|/v/|/watch.+v=))([\\w-]{10,12})(?: [^\"& ]+)?")
+)
+
+func (yt YoutubeSource) PlayVideoUrl(videoUrl string) (*YoutubeTrack, error) {
+	matches := WatchUrl.FindStringSubmatch(videoUrl)
+	if len(matches) >= 2 {
+		return yt.PlayVideo(matches[1])
+	}
+	return nil, errors.New("unable to extract the video id")
+}
+
+func (yt YoutubeSource) ExtractVideoId(videoUrl string) (string, error) {
+	matches := WatchUrl.FindStringSubmatch(videoUrl)
+	if len(matches) >= 2 {
+		return matches[1], nil
+	}
+	return "", errors.New("unable to extract the video id")
+}
+
+func (yt YoutubeSource) CheckVideoUrl(videoUrl string) bool {
+	return WatchUrl.MatchString(videoUrl)
 }
