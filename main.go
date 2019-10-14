@@ -5,14 +5,21 @@ import (
 	"flag"
 	"fmt"
 	"github.com/bwmarrin/discordgo"
-	webm2 "github.com/ebml-go/webm"
 	"github.com/jeffallen/seekinghttp"
+	"lionPlayer/core"
+	"lionPlayer/webm"
 	"lionPlayer/youtube"
 	"os"
 	"os/signal"
+	"regexp"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
+)
+
+var (
+	SeekPattern, _ = regexp.Compile("(?:([0-9]{1,2})h)?(?:([0-9]{1,2})m)?(?:([0-9]{1,2})s)?")
 )
 
 func init() {
@@ -23,6 +30,7 @@ func init() {
 var token string
 
 var ytsrc = youtube.NewYoutubeSource()
+var track core.PlaySeekable
 
 func main() {
 	if token == "" {
@@ -90,7 +98,7 @@ func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 		}
 
 		splut := strings.Split(m.Content, " ")
-		println(strings.Join(splut, ", "))
+
 		if len(splut) == 1 || !ytsrc.CheckVideoUrl(strings.TrimSpace(splut[1])) {
 			_, err := s.ChannelMessageSend(c.ID, "Please provide a correct url")
 			if err != nil {
@@ -123,6 +131,49 @@ func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 				return
 			}
 		}
+	} else if strings.HasPrefix(m.Content, "!stop") {
+		if track != nil {
+			track.Close()
+		}
+	} else if strings.HasPrefix(m.Content, "!seek") {
+		// Find the channel that the message came from.
+		c, err := s.State.Channel(m.ChannelID)
+		if err != nil {
+			// Could not find channel.
+			return
+		}
+
+		if track == nil {
+			_, err := s.ChannelMessageSend(c.ID, "Not playing anything")
+			if err != nil {
+				return
+			}
+			return
+
+		}
+
+		splut := strings.Split(m.Content, " ")
+
+		if len(splut) == 1 || !SeekPattern.MatchString(strings.TrimSpace(splut[1])) {
+			_, err := s.ChannelMessageSend(c.ID, "Please provide a correct seek")
+			if err != nil {
+				return
+			}
+			return
+		}
+		matches := SeekPattern.FindStringSubmatch(strings.TrimSpace(splut[1]))
+		var hour, minute, second int
+		if matches[1] != "" {
+			hour, _ = strconv.Atoi(matches[1])
+		}
+		if matches[2] != "" {
+			minute, _ = strconv.Atoi(matches[2])
+		}
+		if matches[3] != "" {
+			second, _ = strconv.Atoi(matches[3])
+		}
+		ms := time.Duration(hour)*time.Hour + time.Duration(minute)*time.Minute + time.Duration(second)*time.Second
+		_ = track.Seek(ms)
 	}
 }
 
@@ -159,12 +210,12 @@ func playSound(s *discordgo.Session, guildID, channelID, videoId string) (err er
 	// Start speaking.
 	vc.Speaking(true)
 
-	track, err := ytsrc.PlayVideo(videoId)
+	trac, err := ytsrc.PlayVideo(videoId)
 	if err != nil {
 		return err
 	}
 
-	url, err := track.Format.GetValidUrl()
+	url, err := trac.Format.GetValidUrl()
 	if err != nil {
 		return err
 	}
@@ -178,25 +229,34 @@ func playSound(s *discordgo.Session, guildID, channelID, videoId string) (err er
 		return errors.New("got an empty request")
 	}
 
-	var webm webm2.WebM
-	file, err := webm2.Parse(res, &webm)
+	parser, err := webm.NewParser(res)
 
 	if err != nil {
 		return err
 	}
 
+	file, err := parser.Parse()
+	if err != nil {
+		return err
+	}
+	track = file
+	go file.Play()
+	c := file.Chan()
 	for {
-		packet, ok := <-file.Chan
+		packet, ok := <-c
 
 		// If this is the end of the file, just return.
 		if !ok {
-			file.Shutdown()
+			println(len(packet))
+			_ = file.Close()
 			break
 		}
 
 		// Append encoded pcm data to the buffer.
-		vc.OpusSend <- packet.Data
+		vc.OpusSend <- packet
 	}
+
+	track = nil
 
 	// Stop speaking
 	vc.Speaking(false)
