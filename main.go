@@ -98,7 +98,7 @@ func main() {
 func ready(s *discordgo.Session, event *discordgo.Ready) {
 
 	// Set the playing status.
-	s.UpdateStatus(0, "!airhorn")
+	s.UpdateStatus(0, "Playing music using Go only!")
 }
 
 // This function will be called (due to AddHandler above) every time a new
@@ -111,7 +111,7 @@ func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 	}
 
 	// check if the message is "!airhorn"
-	if strings.HasPrefix(m.Content, "!play") && track == nil {
+	if strings.HasPrefix(m.Content, "y!play") && track == nil {
 		// Find the channel that the message came from.
 		c, err := s.State.Channel(m.ChannelID)
 		if err != nil {
@@ -153,11 +153,11 @@ func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 				return
 			}
 		}
-	} else if strings.HasPrefix(m.Content, "!stop") {
+	} else if strings.HasPrefix(m.Content, "y!stop") {
 		if track != nil {
 			track.Close()
 		}
-	} else if strings.HasPrefix(m.Content, "!seek") {
+	} else if strings.HasPrefix(m.Content, "y!seek") {
 		// Find the channel that the message came from.
 		c, err := s.State.Channel(m.ChannelID)
 		if err != nil {
@@ -196,15 +196,15 @@ func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 		}
 		ms := time.Duration(hour)*time.Hour + time.Duration(minute)*time.Minute + time.Duration(second)*time.Second
 		_ = track.Seek(ms)
-	} else if strings.HasPrefix(m.Content, "!pause") {
+	} else if strings.HasPrefix(m.Content, "y!pause") {
 		if track != nil {
 			track.Pause(true)
 		}
-	} else if strings.HasPrefix(m.Content, "!unpause") || strings.HasPrefix(m.Content, "!resume") {
+	} else if strings.HasPrefix(m.Content, "y!unpause") || strings.HasPrefix(m.Content, "!resume") {
 		if track != nil {
 			track.Pause(false)
 		}
-	} else if strings.HasPrefix(m.Content, "!position") {
+	} else if strings.HasPrefix(m.Content, "y!position") {
 		c, err := s.State.Channel(m.ChannelID)
 		if err != nil {
 			// Could not find channel.
