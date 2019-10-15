@@ -1,13 +1,35 @@
+/*
+MIT License
+
+Copyright (c) 2019 Oded Shapira
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+*/
+
+// Package main is responsible for launching the bot.
 package main
 
 import (
-	"errors"
 	"flag"
 	"fmt"
 	"github.com/bwmarrin/discordgo"
-	"github.com/jeffallen/seekinghttp"
 	"lionPlayer/core"
-	"lionPlayer/webm"
 	"lionPlayer/youtube"
 	"os"
 	"os/signal"
@@ -19,7 +41,7 @@ import (
 )
 
 var (
-	SeekPattern, _ = regexp.Compile("(?:([0-9]{1,2})h)?(?:([0-9]{1,2})m)?(?:([0-9]{1,2})s)?")
+	SeekPattern, _ = regexp.Compile("(?:([0-9]{1,2})h)?(?:([0-9]{1,2})m)?(?:([0-9]{1,2})s)?") // A pattern to seek
 )
 
 func init() {
@@ -29,8 +51,9 @@ func init() {
 
 var token string
 
-var ytsrc = youtube.NewYoutubeSource()
+var ytsrc = youtube.NewSource()
 var track core.PlaySeekable
+var lastpacket core.Packet
 
 func main() {
 	if token == "" {
@@ -81,7 +104,7 @@ func ready(s *discordgo.Session, event *discordgo.Ready) {
 // This function will be called (due to AddHandler above) every time a new
 // message is created on any channel that the autenticated bot has access to.
 func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
-
+	println(m.Content)
 	// Ignore all messages created by the bot itself
 	// This isn't required in this specific example but it's a good practice.
 	if m.Author.ID == s.State.User.ID {
@@ -89,7 +112,7 @@ func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 	}
 
 	// check if the message is "!airhorn"
-	if strings.HasPrefix(m.Content, "!play") {
+	if strings.HasPrefix(m.Content, "!play") && track == nil {
 		// Find the channel that the message came from.
 		c, err := s.State.Channel(m.ChannelID)
 		if err != nil {
@@ -123,7 +146,7 @@ func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 		// Look for the message sender in that guild's current voice states.
 		for _, vs := range g.VoiceStates {
 			if vs.UserID == m.Author.ID {
-				err = playSound(s, g.ID, vs.ChannelID, videoId)
+				err = playSound(s, g.ID, vs.ChannelID, videoId, c.ID)
 				if err != nil {
 					fmt.Println("Error playing sound:", err)
 				}
@@ -174,6 +197,27 @@ func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 		}
 		ms := time.Duration(hour)*time.Hour + time.Duration(minute)*time.Minute + time.Duration(second)*time.Second
 		_ = track.Seek(ms)
+	} else if strings.HasPrefix(m.Content, "!pause") {
+		if track != nil {
+			track.Pause(true)
+		}
+	} else if strings.HasPrefix(m.Content, "!unpause") || strings.HasPrefix(m.Content, "!resume") {
+		if track != nil {
+			track.Pause(false)
+		}
+	} else if strings.HasPrefix(m.Content, "!position") {
+		c, err := s.State.Channel(m.ChannelID)
+		if err != nil {
+			// Could not find channel.
+			return
+		}
+
+		if track != nil {
+			_, err = s.ChannelMessageSend(c.ID, lastpacket.Timecode.String())
+			if err != nil {
+				return
+			}
+		}
 	}
 }
 
@@ -196,8 +240,7 @@ func guildCreate(s *discordgo.Session, event *discordgo.GuildCreate) {
 // loadSound attempts to load an encoded sound file from disk.
 
 // playSound plays the current buffer to the provided channel.
-func playSound(s *discordgo.Session, guildID, channelID, videoId string) (err error) {
-
+func playSound(s *discordgo.Session, guildID, channelID, videoId, msgchannel string) (err error) {
 	// Join the provided voice channel.
 	vc, err := s.ChannelVoiceJoin(guildID, channelID, false, true)
 	if err != nil {
@@ -209,33 +252,19 @@ func playSound(s *discordgo.Session, guildID, channelID, videoId string) (err er
 
 	// Start speaking.
 	vc.Speaking(true)
-
+	println("before play video")
 	trac, err := ytsrc.PlayVideo(videoId)
 	if err != nil {
 		return err
 	}
+	println("after play video")
 
-	url, err := trac.Format.GetValidUrl()
+	_, err = s.ChannelMessageSend(msgchannel, fmt.Sprintf("Now Playing - %s - %s [%s]", trac.Title, trac.Author, trac.Duration))
 	if err != nil {
 		return err
 	}
+	file, err := trac.GetPlaySeekable()
 
-	res := seekinghttp.New(url)
-	res.Client = &ytsrc.Client
-
-	if size, err := res.Size(); err != nil {
-		return err
-	} else if size == 0 {
-		return errors.New("got an empty request")
-	}
-
-	parser, err := webm.NewParser(res)
-
-	if err != nil {
-		return err
-	}
-
-	file, err := parser.Parse()
 	if err != nil {
 		return err
 	}
@@ -244,16 +273,15 @@ func playSound(s *discordgo.Session, guildID, channelID, videoId string) (err er
 	c := file.Chan()
 	for {
 		packet, ok := <-c
-
+		lastpacket = packet
 		// If this is the end of the file, just return.
 		if !ok {
-			println(len(packet))
 			_ = file.Close()
 			break
 		}
 
 		// Append encoded pcm data to the buffer.
-		vc.OpusSend <- packet
+		vc.OpusSend <- packet.Data
 	}
 
 	track = nil

@@ -22,40 +22,55 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-package core
+// package youtube abstracts searching and playing audio through youtube.
+// currently only the audio/webm container with the opus codec is supported
+package youtube
 
 import (
-	"io"
+	"errors"
+	"github.com/jeffallen/seekinghttp"
+	"lionPlayer/core"
+	"lionPlayer/webm"
 	"time"
 )
 
-// Decoded packet
-type Packet struct {
-	Timecode time.Duration
-	Data     []byte
+type Track struct {
+	VideoId  string
+	Title    string
+	Author   string
+	Duration time.Duration
+	IsStream bool
+	source   *Source
+	Format   *Format
 }
 
-// The basic interface of a playable interface
-type Playable interface {
-	io.Closer            // Will be used to stop the track
-	Chan() <-chan Packet // returns the output channel
-	Play()               // Start this function in a new coroutine, it feeds the channel data
-	Pause(bool)          // Whether to pause or unpause
+// Return a playable of this track that can be played.
+func (t Track) GetPlayable() (core.Playable, error) {
+	return t.GetPlaySeekable()
 }
 
-// The interface of a playable that can be seek in
-type PlaySeekable interface {
-	Playable
-	Seek(duration time.Duration) error // Seek to a point in the track
-}
+// Return a playseekable of this track that can be played.
+func (t Track) GetPlaySeekable() (core.PlaySeekable, error) {
+	vurl, err := t.Format.GetValidUrl()
+	if err != nil {
+		return nil, err
+	}
 
-// An interface for a track
-type Track interface {
-	GetPlayable() (Playable, error)
-}
+	res := seekinghttp.New(vurl)
+	res.Client = &t.source.Client
 
-// An interface for a track that can be seeked
-type SeekableTrack interface {
-	Track
-	GetPlaySeekable() (PlaySeekable, error)
+	if size, err := res.Size(); err != nil {
+		return nil, err
+	} else if size == 0 {
+		return nil, errors.New("got an empty request")
+	}
+
+	parser, err := webm.NewParser(res)
+
+	if err != nil {
+		return nil, err
+	}
+
+	file, err := parser.Parse()
+	return file, nil
 }

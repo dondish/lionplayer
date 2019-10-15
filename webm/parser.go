@@ -1,3 +1,29 @@
+/*
+MIT License
+
+Copyright (c) 2019 Oded Shapira
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+*/
+
+// Package webm provides top level structs that can be used to easily play
+// tracks that are encoded in WEBM.
 package webm
 
 import (
@@ -10,42 +36,34 @@ import (
 )
 
 /*
-Improved version of https://github.com/ebml-go/webm that parses seeks on the go. has way lower loading times.
+Improved version of https://github.com/ebml-go/webm that parses seeks on the Go. has way lower loading times.
 */
 
-const (
-	BadTC    = time.Duration(-1000000000000000)
-	shutdown = 2 * BadTC
-)
-
-type CuePoint struct {
-	Time      uint64          `ebml:"B3"`
-	Positions []TrackPosition `ebml:"B7"`
-}
-
-type TrackPosition struct {
-	Track            uint64 `ebml:"F7"`
-	ClusterPosition  uint64 `ebml:"F1"`
-	RelativePosition uint64 `ebml:"F0"`
-}
-
+// A Top-Level Element of information with many tracks described.
+// https://matroska.org/technical/specs/index.html#Tracks
 type Tracks struct {
 	TrackEntry []TrackEntry `ebml:"AE"`
 }
 
+// Describes a track with all Elements.
+// https://matroska.org/technical/specs/index.html#TrackEntry
 type TrackEntry struct {
 	TrackNumber uint64 `ebml:"D7"`
 }
 
+// Contains a single seek entry to an EBML Element.
+// https://matroska.org/technical/specs/index.html#Seek
 type Seek struct {
 	SeekId       []byte `ebml:"53AB"`
 	SeekPosition uint64 `ebml:"53AC"`
 }
 
+// The Parser abstracts the parsing of ebml
 type Parser struct {
 	*ebml.Element
 }
 
+// Returns a new parser instance for this input stream
 func NewParser(rs io.ReadSeeker) (*Parser, error) {
 	var e *ebml.Element
 	e, err := ebml.RootElement(rs)
@@ -55,6 +73,7 @@ func NewParser(rs io.ReadSeeker) (*Parser, error) {
 	return &Parser{e}, nil
 }
 
+// Parses the SeekHead and returns the position of the Cues element in the segment
 func (p *Parser) parseMetaSeek(seekhead *ebml.Element) (uint64, error) {
 	for seek, err := seekhead.Next(); err == nil; seek, err = seekhead.Next() {
 		var rseek Seek
@@ -69,9 +88,7 @@ func (p *Parser) parseMetaSeek(seekhead *ebml.Element) (uint64, error) {
 	return 0, errors.New("cues not found")
 }
 
-/**
-Returns a list of track ids in this segment
-*/
+// Parses a Tracks element and returns the track-ids found in each TrackEntry
 func (p *Parser) parseTracks(tracks *ebml.Element) ([]uint64, error) {
 	tracknumbers := make([]uint64, 0)
 	var te TrackEntry
@@ -85,11 +102,8 @@ func (p *Parser) parseTracks(tracks *ebml.Element) ([]uint64, error) {
 	return tracknumbers, nil
 }
 
-/*
-Parse the webm file
-*/
+// Parses a webm file and returns a playable, seek is only supported on non livestream songs.
 func (p *Parser) Parse() (core.PlaySeekable, error) {
-	println("p", p.Id)
 	ebmlh, err := p.Next()
 	if err != nil {
 		return nil, err
@@ -109,7 +123,7 @@ func (p *Parser) Parse() (core.PlaySeekable, error) {
 		return nil, errors.New(fmt.Sprintf("got something that is not segment: %#x", segment.Id))
 	}
 	t := Track{
-		Output:  make(chan []byte),
+		Output:  make(chan core.Packet),
 		seek:    make(chan time.Duration, 3),
 		parser:  p,
 		segment: segment,
@@ -120,14 +134,15 @@ func (p *Parser) Parse() (core.PlaySeekable, error) {
 	for el, err := segment.Next(); err == nil; el, err = segment.Next() {
 		switch el.Id {
 		case 0x114D9B74: // SeekHead
-			cues, err := p.parseMetaSeek(el)
+			pos, err := p.parseMetaSeek(el)
 			if err != nil {
 				return nil, err
 			}
-			t.cues = int64(cues)
+			if pos > 0 {
+				t.cues = int64(pos) + el.Offset
+			}
 		case 0x1F43B675: // Clusters
 			_, err = segment.Seek(el.Offset, 0)
-			t.data = el.Offset
 			if err != nil {
 				return nil, err
 			}

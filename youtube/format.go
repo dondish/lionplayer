@@ -1,20 +1,41 @@
+/*
+MIT License
+
+Copyright (c) 2019 Oded Shapira
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+*/
+
+// package youtube abstracts searching and playing audio through youtube.
+// currently only the audio/webm container with the opus codec is supported
 package youtube
 
 import (
-	"encoding/json"
 	"errors"
 	"io/ioutil"
-	"math"
 	"net/http"
 	"net/url"
 	"regexp"
 	"strconv"
 	"strings"
 	"sync"
-	"time"
 )
-
-var cipherCache sync.Map = sync.Map{}
 
 var (
 	CipherVar    = "[a-zA-Z_\\$][a-zA-Z_0-9]*"
@@ -41,14 +62,17 @@ var (
 			"),?\\n?)+)\\};")
 )
 
-type YoutubeFormat struct {
-	Type         string
-	Bitrate      int64
-	Clen         int64
-	Url          string
-	Signature    string
-	SignatureKey string
-	PlayerScript string
+var cipherCache = sync.Map{}
+
+// Defines a youtube format
+type Format struct {
+	Type         string // The audio codec and container used
+	Bitrate      int64  // The bitrate
+	Clen         int64  // The length of the content
+	Url          string // The direct URL (without signature)
+	Signature    string // The signature
+	SignatureKey string // The key in the query for the signature
+	PlayerScript string // The location of the JS to parse the signature
 }
 
 func compileAndExtract(pattern, body string) (string, error) {
@@ -64,7 +88,7 @@ func compileAndExtract(pattern, body string) (string, error) {
 }
 
 // Decipher the signature if exists to get the valid url.
-func (ytfmt *YoutubeFormat) GetValidUrl() (string, error) {
+func (ytfmt *Format) GetValidUrl() (string, error) {
 	if ytfmt.Signature == "" {
 		return ytfmt.Url, nil
 	}
@@ -168,30 +192,12 @@ func (ytfmt *YoutubeFormat) GetValidUrl() (string, error) {
 	return uri.String(), nil
 }
 
-type YoutubeTrack struct {
-	VideoId  string
-	Title    string
-	Author   string
-	Duration time.Duration
-	IsStream bool
-	Format   *YoutubeFormat
-}
-
-type YoutubeSource struct {
-	Client http.Client
-}
-
-// Create the YoutubeSource
-func NewYoutubeSource() *YoutubeSource {
-	return &YoutubeSource{Client: http.Client{}}
-}
-
 // Currently supports only audio/webm with the opus codec.
 // It will support more codecs in the future
-func findBestFormat(args map[string]interface{}, js string) (*YoutubeFormat, error) {
+func findBestFormat(args map[string]interface{}, js string) (*Format, error) {
 	adpt := strings.Split(args["adaptive_fmts"].(string), ",")
 
-	var bestformat *YoutubeFormat
+	var bestformat *Format
 	for _, format := range adpt {
 		fomt, err := url.ParseQuery(format)
 		if err != nil {
@@ -209,7 +215,7 @@ func findBestFormat(args map[string]interface{}, js string) (*YoutubeFormat, err
 			if sk == "" {
 				sk = "signature"
 			}
-			bestformat = &YoutubeFormat{
+			bestformat = &Format{
 				Type:         fomt.Get("type"),
 				Bitrate:      int64(bitrate),
 				Clen:         int64(clen),
@@ -221,95 +227,4 @@ func findBestFormat(args map[string]interface{}, js string) (*YoutubeFormat, err
 		}
 	}
 	return bestformat, nil
-}
-
-// Play a video by a video id
-func (yt YoutubeSource) PlayVideo(videoId string) (*YoutubeTrack, error) {
-	req, err := http.NewRequest("GET", strings.Join([]string{"https://www.youtube.com/watch?v=", videoId, "&pbj=1&hl=en"}, ""), nil)
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Add("User-Agent", "lionPlayer v0.1")
-	req.Header.Add("X-YouTube-Client-Name", "1")
-	req.Header.Add("X-YouTube-Client-Version", "2.20191008.04.01")
-	res, err := yt.Client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	var resjson []interface{}
-	dec := json.NewDecoder(res.Body)
-	err = dec.Decode(&resjson)
-	if err != nil {
-		return nil, err
-	}
-	var pi map[string]interface{}
-	for _, arg := range resjson {
-		if r, ok := arg.(map[string]interface{})["player"]; ok {
-			pi = r.(map[string]interface{})
-			break
-		}
-	}
-	if pi == nil {
-		return nil, errors.New("pi is nil")
-	}
-	args := pi["args"].(map[string]interface{})
-	playerResponse, ok := args["player_response"]
-
-	if ok {
-		var pres map[string]interface{}
-		err = json.Unmarshal([]byte(playerResponse.(string)), &pres)
-		if err != nil {
-			return nil, err
-		}
-		vDetails := pres["videoDetails"].(map[string]interface{})
-		isStream := vDetails["isLiveContent"].(bool)
-		var duration time.Duration
-		if isStream {
-			duration = math.MaxInt64
-		} else {
-			seconds, err := strconv.Atoi(vDetails["lengthSeconds"].(string))
-			if err != nil {
-				return nil, err
-			}
-			duration = time.Second * time.Duration(seconds)
-		}
-		format, err := findBestFormat(args, pi["assets"].(map[string]interface{})["js"].(string))
-		if err != nil {
-			return nil, err
-		}
-		return &YoutubeTrack{
-			VideoId:  videoId,
-			Title:    vDetails["title"].(string),
-			Author:   vDetails["author"].(string),
-			Duration: duration,
-			IsStream: isStream,
-			Format:   format,
-		}, nil
-	} else {
-		return nil, errors.New("couldn't find the track")
-	}
-}
-
-var (
-	WatchUrl, _ = regexp.Compile("(?:https?://)?(?:www\\.)?(?:youtu\\.be/|youtube\\.com(?:/embed/|/v/|/watch.+v=))([\\w-]{10,12})(?: [^\"& ]+)?")
-)
-
-func (yt YoutubeSource) PlayVideoUrl(videoUrl string) (*YoutubeTrack, error) {
-	matches := WatchUrl.FindStringSubmatch(videoUrl)
-	if len(matches) >= 2 {
-		return yt.PlayVideo(matches[1])
-	}
-	return nil, errors.New("unable to extract the video id")
-}
-
-func (yt YoutubeSource) ExtractVideoId(videoUrl string) (string, error) {
-	matches := WatchUrl.FindStringSubmatch(videoUrl)
-	if len(matches) >= 2 {
-		return matches[1], nil
-	}
-	return "", errors.New("unable to extract the video id")
-}
-
-func (yt YoutubeSource) CheckVideoUrl(videoUrl string) bool {
-	return WatchUrl.MatchString(videoUrl)
 }
