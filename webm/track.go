@@ -31,6 +31,7 @@ import (
 	"fmt"
 	"github.com/dondish/lionPlayer/core"
 	"github.com/ebml-go/ebml"
+	"io"
 	"log"
 	"time"
 )
@@ -318,5 +319,7 @@ func (t Track) Play() {
 			err = t.internalSeek(seek)
 		}
 	}
-	log.Println("play error", err)
+	if err != io.EOF && err != nil {
+		log.Println("Player Error:", err)
+	}
 }
