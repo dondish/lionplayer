@@ -29,9 +29,9 @@ package webm
 import (
 	"errors"
 	"fmt"
+	"github.com/dondish/lionPlayer/core"
 	"github.com/ebml-go/ebml"
 	"io"
-	"lionPlayer/core"
 	"time"
 )
 
