@@ -138,7 +138,15 @@ func (t Track) internalSeek(duration time.Duration) error {
 				_, err := t.segment.Seek(t.segment.Offset+int64(pos), 0) // return the last
 				return err
 			} else {
-				_, err := t.segment.Seek(t.segment.Offset+curr, 0)
+				_, err = t.segment.Seek(t.segment.Offset, 0)
+				if err != nil {
+					return err
+				}
+				sh, err := t.segment.Next()
+				if err != nil {
+					return err
+				}
+				_, err = t.segment.Seek(sh.Offset+curr, 0)
 				return err
 			}
 		}
