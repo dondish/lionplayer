@@ -132,20 +132,20 @@ func (t Track) internalSeek(duration time.Duration) error {
 			return err
 		}
 
-		if time.Duration(cuepoint.Time)*time.Millisecond > duration { // Found the cuepoint that passed the duration given
+		if time.Duration(cuepoint.Time)*time.Millisecond >= duration { // Found the cuepoint that passed the duration given
 			log.Println("bypassed time", pos, duration)
+			_, err = t.segment.Seek(t.segment.Offset, 0)
+			if err != nil {
+				return err
+			}
+			sh, err := t.segment.Next()
+			if err != nil {
+				return err
+			}
 			if pos > 0 {
-				_, err := t.segment.Seek(t.segment.Offset+int64(pos), 0) // return the last
+				_, err := t.segment.Seek(sh.Offset+int64(pos), 0) // return the last
 				return err
 			} else {
-				_, err = t.segment.Seek(t.segment.Offset, 0)
-				if err != nil {
-					return err
-				}
-				sh, err := t.segment.Next()
-				if err != nil {
-					return err
-				}
 				_, err = t.segment.Seek(sh.Offset+curr, 0)
 				return err
 			}

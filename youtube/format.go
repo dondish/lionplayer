@@ -22,8 +22,6 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-// package youtube abstracts searching and playing audio through youtube.
-// currently only the audio/webm container with the opus codec is supported
 package youtube
 
 import (
