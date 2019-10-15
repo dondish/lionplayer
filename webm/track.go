@@ -124,25 +124,23 @@ func (t Track) internalSeek(duration time.Duration) error {
 	if cues.Id != 0x1C53BB6B {
 		log.Println("wrong cues id", fmt.Sprintf("%#x", cues.Id))
 	}
-	var pos uint64
+	var lastcuepoint CuePoint
 	var cuepoint CuePoint
 	for el, err := cues.Next(); err == nil; el, err = cues.Next() { // Go over the cuepoints
+		lastcuepoint = cuepoint
 		err = el.Unmarshal(&cuepoint)
 		if err != nil {
 			return err
 		}
 
 		if time.Duration(cuepoint.Time)*time.Millisecond > duration { // Found the cuepoint that passed the duration given
-			_, err = t.segment.Seek(t.segment.Offset+12+int64(pos), 0)
+			_, err = t.segment.Seek(t.segment.Offset+12+int64(lastcuepoint.Positions[t.trackId].ClusterPosition), 0)
 			return err
 		}
-		for _, track := range cuepoint.Positions {
-			if track.Track == t.trackId {
-				pos = track.ClusterPosition
-			}
-		}
+
 	}
-	_, err = t.segment.Seek(t.segment.Offset+12+int64(pos), 0) // last cluster
+
+	_, err = t.segment.Seek(t.segment.Offset+12+int64(lastcuepoint.Positions[t.trackId].ClusterPosition), 0)
 	return err
 }
 
