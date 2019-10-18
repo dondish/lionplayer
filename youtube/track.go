@@ -52,7 +52,11 @@ func (t Track) GetChannels() int {
 }
 
 func (t Track) GetCodec() string {
-	return strings.Split(t.Format.Type, "; ")[1]
+	return strings.Trim(strings.Split(t.Format.Type, "=")[1], "\"")
+}
+
+func (t Track) GetDuration() time.Duration {
+	return t.Duration
 }
 
 // Return a playable of this track that can be played.
@@ -75,13 +79,16 @@ func (t Track) GetPlaySeekable() (core.PlaySeekable, error) {
 	} else if size == 0 {
 		return nil, errors.New("got an empty request")
 	}
+	if strings.Split(t.Format.Type, ";")[0] == "audio/webm" {
+		parser, err := webm.NewParser(res)
 
-	parser, err := webm.NewParser(res)
+		if err != nil {
+			return nil, err
+		}
 
-	if err != nil {
-		return nil, err
+		file, err := parser.Parse()
+		return file, nil
+	} else {
+		return nil, errors.New("mime type not supported")
 	}
-
-	file, err := parser.Parse()
-	return file, nil
 }

@@ -55,6 +55,7 @@ type Track interface {
 	GetBitrate() int
 	GetChannels() int
 	GetCodec() string
+	GetDuration() time.Duration
 }
 
 // An interface for a track that can be seeked

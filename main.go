@@ -52,7 +52,7 @@ func init() {
 var token string
 
 var ytsrc = youtube.NewSource()
-var track *core.PlaySeekable
+var track core.PlaySeekable
 var lastpacket core.Packet
 
 func main() {
@@ -240,6 +240,7 @@ func guildCreate(s *discordgo.Session, event *discordgo.GuildCreate) {
 
 // playSound plays the current buffer to the provided channel.
 func playSound(s *discordgo.Session, guildID, channelID, videoId, msgchannel string) (err error) {
+
 	// Join the provided voice channel.
 	vc, err := s.ChannelVoiceJoin(guildID, channelID, false, true)
 	if err != nil {
@@ -251,12 +252,28 @@ func playSound(s *discordgo.Session, guildID, channelID, videoId, msgchannel str
 
 	// Start speaking.
 	vc.Speaking(true)
+
+	defer func() {
+		// Stop speaking
+		vc.Speaking(false)
+
+		// Sleep for a specificed amount of time before ending.
+		time.Sleep(250 * time.Millisecond)
+
+		// Disconnect from the provided voice channel.
+		vc.Disconnect()
+	}()
+
 	trac, err := ytsrc.PlayVideo(videoId)
 	if err != nil {
 		return err
 	}
 
-	_, err = s.ChannelMessageSend(msgchannel, fmt.Sprintf("Now Playing - %s - %s [%s]", trac.Title, trac.Author, trac.Duration))
+	if trac.IsStream {
+		_, err = s.ChannelMessageSend(msgchannel, fmt.Sprintf("Now Playing - %s - %s [LIVE]", trac.Title, trac.Author))
+	} else {
+		_, err = s.ChannelMessageSend(msgchannel, fmt.Sprintf("Now Playing - %s - %s [%s]", trac.Title, trac.Author, trac.Duration))
+	}
 	if err != nil {
 		return err
 	}
@@ -282,15 +299,6 @@ func playSound(s *discordgo.Session, guildID, channelID, videoId, msgchannel str
 	}
 
 	track = nil
-
-	// Stop speaking
-	vc.Speaking(false)
-
-	// Sleep for a specificed amount of time before ending.
-	time.Sleep(250 * time.Millisecond)
-
-	// Disconnect from the provided voice channel.
-	vc.Disconnect()
 
 	return nil
 }
