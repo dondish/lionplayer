@@ -52,6 +52,9 @@ type PlaySeekable interface {
 // An interface for a track
 type Track interface {
 	GetPlayable() (Playable, error)
+	GetBitrate() int
+	GetChannels() int
+	GetCodec() string
 }
 
 // An interface for a track that can be seeked

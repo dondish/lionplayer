@@ -29,6 +29,7 @@ import (
 	"github.com/dondish/lionPlayer/core"
 	"github.com/dondish/lionPlayer/webm"
 	"github.com/jeffallen/seekinghttp"
+	"strings"
 	"time"
 )
 
@@ -40,6 +41,18 @@ type Track struct {
 	IsStream bool
 	source   *Source
 	Format   *Format
+}
+
+func (t Track) GetBitrate() int {
+	return int(t.Format.Bitrate)
+}
+
+func (t Track) GetChannels() int {
+	return 2
+}
+
+func (t Track) GetCodec() string {
+	return strings.Split(t.Format.Type, "; ")[1]
 }
 
 // Return a playable of this track that can be played.

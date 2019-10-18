@@ -111,6 +111,40 @@ func (t Track) Chan() <-chan core.Packet {
 	return t.Output
 }
 
+func readUint64(e *ebml.Element) (uint64, error) {
+	d, err := e.ReadData()
+	var i int
+	sz := len(d)
+	var val uint64
+	for i = 0; i < sz; i++ {
+		val <<= 8
+		val += uint64(d[i])
+	}
+	return val, err
+}
+
+// get the cluster position from the cuepoint postions element
+func getClusterPosition(positions *ebml.Element, trackid uint64) (position uint64, err error) {
+	var pos *ebml.Element
+	var trac uint64
+	var clusterpos *ebml.Element
+	for pos, err = positions.Next(); err == nil; pos, err = positions.Next() {
+		trac, err = readUint64(pos)
+
+		if trac == trackid {
+			clusterpos, err = positions.Next()
+			if err != nil {
+				return
+			}
+			position, err = readUint64(clusterpos)
+			return
+		}
+
+		_, err = positions.Seek(pos.Size(), 1)
+	}
+	return
+}
+
 // Seeks to the cluster just before the timecode given
 func (t Track) internalSeek(duration time.Duration) error {
 	if t.cues == 0 {
@@ -124,23 +158,48 @@ func (t Track) internalSeek(duration time.Duration) error {
 	if cues.Id != 0x1C53BB6B {
 		log.Println("wrong cues id", fmt.Sprintf("%#x", cues.Id))
 	}
-	var lastcuepoint CuePoint
-	var cuepoint CuePoint
+	var offs int64
+	var prev *ebml.Element
+	var element *ebml.Element
+	var tim *ebml.Element
+	var timecode uint64
 	for el, err := cues.Next(); err == nil; el, err = cues.Next() { // Go over the cuepoints
-		lastcuepoint = cuepoint
-		err = el.Unmarshal(&cuepoint)
+		prev = element
+		element = el
+		tim, err = el.Next()
 		if err != nil {
 			return err
 		}
-
-		if time.Duration(cuepoint.Time)*time.Millisecond > duration { // Found the cuepoint that passed the duration given
-			_, err = t.segment.Seek(t.segment.Offset+12+int64(lastcuepoint.Positions[t.trackId].ClusterPosition), 0)
+		timecode, err = readUint64(tim)
+		if err != nil {
 			return err
 		}
-
+		if time.Duration(timecode)*time.Millisecond > duration { // Found the cuepoint that passed the duration given
+			prev.Seek(offs, 0)
+			positions, err := prev.Next()
+			if err != nil {
+				return err
+			}
+			pos, err := getClusterPosition(positions, t.trackId)
+			if err != nil {
+				return err
+			}
+			_, err = t.segment.Seek(t.segment.Offset+12+int64(pos), 0)
+			return err
+		}
+		offs, err = el.Seek(0, 1)
+		_, err = cues.Seek(el.Size(), 1)
 	}
-
-	_, err = t.segment.Seek(t.segment.Offset+12+int64(lastcuepoint.Positions[t.trackId].ClusterPosition), 0)
+	_, _ = prev.Seek(offs, 0)
+	positions, err := prev.Next()
+	if err != nil {
+		return err
+	}
+	pos, err := getClusterPosition(positions, t.trackId)
+	if err != nil {
+		return err
+	}
+	_, err = t.segment.Seek(t.segment.Offset+12+int64(pos), 0) // last cluster
 	return err
 }
 
@@ -317,7 +376,7 @@ func (t Track) Play() {
 			err = t.internalSeek(seek)
 		}
 	}
-	if err != io.EOF && err != nil {
-		log.Println("Player Error:", err)
+	if err != nil && err != io.EOF {
+		log.Println("play error", err)
 	}
 }
