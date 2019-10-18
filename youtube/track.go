@@ -26,8 +26,8 @@ package youtube
 
 import (
 	"errors"
-	"github.com/dondish/lionPlayer/core"
-	"github.com/dondish/lionPlayer/webm"
+	"github.com/dondish/lionplayer/core"
+	"github.com/dondish/lionplayer/webm"
 	"github.com/jeffallen/seekinghttp"
 	"strings"
 	"time"

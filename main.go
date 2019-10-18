@@ -29,8 +29,8 @@ import (
 	"flag"
 	"fmt"
 	"github.com/bwmarrin/discordgo"
-	"github.com/dondish/lionPlayer/core"
-	"github.com/dondish/lionPlayer/youtube"
+	"github.com/dondish/lionplayer/core"
+	"github.com/dondish/lionplayer/youtube"
 	"os"
 	"os/signal"
 	"regexp"
@@ -52,7 +52,7 @@ func init() {
 var token string
 
 var ytsrc = youtube.NewSource()
-var track core.PlaySeekable
+var track *core.PlaySeekable
 var lastpacket core.Packet
 
 func main() {
