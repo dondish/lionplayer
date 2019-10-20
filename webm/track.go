@@ -29,9 +29,9 @@ package webm
 import (
 	"errors"
 	"fmt"
-	"github.com/dondish/lionplayer/core"
 	"github.com/ebml-go/ebml"
 	"io"
+	"lionplayer/core"
 	"log"
 	"time"
 )
@@ -64,20 +64,14 @@ type Cluster struct {
 // The track implements the core.Playable and core.PlaySeekable interface,
 // Although seeking in a live-stream will return an error.
 type Track struct {
-	Output  chan core.Packet   // Output channel of Packet instances
-	seek    chan time.Duration // signal channel
-	parser  *Parser            // The parser responsible for this Track
-	segment *ebml.Element      // The segment
-	cues    int64              // the position of the cues element
-	tracks  []uint64           // all of the tracks' ids
-	trackId uint64             // the current track id
-}
-
-// Contains all information relative to a seek point in the Segment.
-// https://matroska.org/technical/specs/index.html#CuePoint
-type CuePoint struct {
-	Time      uint64          `ebml:"B3"`
-	Positions []TrackPosition `ebml:"B7"`
+	Output    chan core.Packet   // Output channel of Packet instances
+	seek      chan time.Duration // signal channel
+	parser    *Parser            // The parser responsible for this Track
+	segment   *ebml.Element      // The segment
+	cues      int64              // the position of the cues element
+	cuepoints []CuePoint         // saved cuepoints
+	tracks    []uint64           // all of the tracks' ids
+	trackId   uint64             // the current track id
 }
 
 // Contain positions for different tracks corresponding to the timestamp.
@@ -123,26 +117,59 @@ func readUint64(e *ebml.Element) (uint64, error) {
 	return val, err
 }
 
-// get the cluster position from the cuepoint postions element
-func getClusterPosition(positions *ebml.Element, trackid uint64) (position uint64, err error) {
+// get the cluster positions from the cuepoint postions element
+func getClusterPositions(positions *ebml.Element, tracklen int) (poses []uint64, err error) {
+	poses = make([]uint64, tracklen+1)
 	var pos *ebml.Element
 	var trac uint64
+	var position uint64
 	var clusterpos *ebml.Element
-	for pos, err = positions.Next(); err == nil; pos, err = positions.Next() {
+	for pos, err = positions.Next(); err == nil && pos.Id == 0xF7; pos, err = positions.Next() {
 		trac, err = readUint64(pos)
 
-		if trac == trackid {
-			clusterpos, err = positions.Next()
-			if err != nil {
-				return
-			}
-			position, err = readUint64(clusterpos)
+		clusterpos, err = positions.Next()
+		if err != nil {
 			return
 		}
-
+		position, err = readUint64(clusterpos)
+		poses[trac] = position
 		_, err = positions.Seek(pos.Size(), 1)
 	}
+	if err == io.EOF {
+		err = nil
+	}
 	return
+}
+
+// get the cuepoints from the cues element
+func parseCues(cues *ebml.Element, tracklen int) ([]CuePoint, error) {
+	if cues.Id != 0x1C53BB6B {
+		log.Println("wrong cues id", fmt.Sprintf("%#x", cues.Id))
+	}
+	cuepoints := make([]CuePoint, 0)
+	var tim *ebml.Element
+	var timecode uint64
+	for el, err := cues.Next(); err == nil && el.Id == 0xBB; el, err = cues.Next() { // Go over the cuepoints
+		tim, err = el.Next()
+		if err != nil {
+			return nil, err
+		}
+		timecode, err = readUint64(tim)
+		if err != nil {
+			return nil, err
+		}
+		positions, err := el.Next()
+		if err != nil {
+			return nil, err
+		}
+		poses, err := getClusterPositions(positions, tracklen)
+		cuepoints = append(cuepoints, CuePoint{
+			timecode:  timecode,
+			positions: poses,
+		})
+		_, err = cues.Seek(el.Size(), 1)
+	}
+	return cuepoints, nil
 }
 
 // Seeks to the cluster just before the timecode given
@@ -150,56 +177,26 @@ func (t Track) internalSeek(duration time.Duration) error {
 	if t.cues == 0 {
 		return errors.New("seeks are not supported in streams")
 	}
-	_, err := t.segment.Seek(t.cues, 0)
-	cues, err := t.segment.Next()
-	if err != nil {
-		return err
-	}
-	if cues.Id != 0x1C53BB6B {
-		log.Println("wrong cues id", fmt.Sprintf("%#x", cues.Id))
-	}
-	var offs int64
-	var prev *ebml.Element
-	var element *ebml.Element
-	var tim *ebml.Element
-	var timecode uint64
-	for el, err := cues.Next(); err == nil; el, err = cues.Next() { // Go over the cuepoints
-		prev = element
-		element = el
-		tim, err = el.Next()
+	if t.cuepoints == nil {
+		_, err := t.segment.Seek(t.cues, 0)
 		if err != nil {
 			return err
 		}
-		timecode, err = readUint64(tim)
+		cues, err := t.segment.Next()
+		t.cuepoints, err = parseCues(cues, len(t.tracks))
 		if err != nil {
 			return err
 		}
-		if time.Duration(timecode)*time.Millisecond > duration { // Found the cuepoint that passed the duration given
-			prev.Seek(offs, 0)
-			positions, err := prev.Next()
-			if err != nil {
-				return err
-			}
-			pos, err := getClusterPosition(positions, t.trackId)
-			if err != nil {
-				return err
-			}
-			_, err = t.segment.Seek(t.segment.Offset+12+int64(pos), 0)
+	}
+	var lastpos uint64 = 0
+	for _, cuepoint := range t.cuepoints {
+		if time.Duration(cuepoint.timecode)*time.Millisecond > duration {
+			_, err := t.segment.Seek(t.segment.Offset+12+int64(lastpos), 0)
 			return err
 		}
-		offs, err = el.Seek(0, 1)
-		_, err = cues.Seek(el.Size(), 1)
+		lastpos = cuepoint.positions[t.trackId]
 	}
-	_, _ = prev.Seek(offs, 0)
-	positions, err := prev.Next()
-	if err != nil {
-		return err
-	}
-	pos, err := getClusterPosition(positions, t.trackId)
-	if err != nil {
-		return err
-	}
-	_, err = t.segment.Seek(t.segment.Offset+12+int64(pos), 0) // last cluster
+	_, err := t.segment.Seek(t.segment.Offset+12+int64(lastpos), 0)
 	return err
 }
 

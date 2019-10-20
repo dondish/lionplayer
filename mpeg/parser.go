@@ -22,12 +22,12 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-package mp4
+package mpeg
 
 import (
 	"errors"
-	"github.com/dondish/lionplayer/core"
 	"io"
+	"lionplayer/core"
 )
 
 type TrackEntry struct {
@@ -41,7 +41,8 @@ type Parser struct {
 	sampleTables []*Element
 }
 
-func NewParser(rs io.ReadSeeker, length int64) *Parser {
+// Creates a new Parser
+func New(rs io.ReadSeeker, length int64) *Parser {
 	return &Parser{Element: &Element{
 		R:      rs,
 		N:      length,
@@ -83,9 +84,9 @@ func (p *Parser) handleMdia(track *Track, trak *Element) error {
 	return err
 }
 
-func (p *Parser) handleMinf(minf *Element) error {
-
-}
+//func (p *Parser) handleMinf(minf *Element) error {
+//
+//}
 
 func (p *Parser) handleTrak(te *TrackEntry, trak *Element) error {
 	var el *Element
@@ -114,10 +115,14 @@ func (p *Parser) handleTrak(te *TrackEntry, trak *Element) error {
 func (p *Parser) handleMoov(track *Track, moov *Element) error {
 	var el *Element
 	var err error
+	te := &TrackEntry{
+		Id:      0,
+		Handler: "",
+	}
 	for el, err = moov.Next(); err == nil; el, err = moov.Next() {
 		switch el.Id {
 		case "trak":
-			err = p.handleTrak(track, el)
+			err = p.handleTrak(te, el)
 			if err != nil {
 				return err
 			}

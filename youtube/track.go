@@ -26,9 +26,9 @@ package youtube
 
 import (
 	"errors"
-	"github.com/dondish/lionplayer/core"
-	"github.com/dondish/lionplayer/webm"
-	"github.com/jeffallen/seekinghttp"
+	"lionplayer/core"
+	"lionplayer/seekablehttp"
+	"lionplayer/webm"
 	"strings"
 	"time"
 )
@@ -71,8 +71,7 @@ func (t Track) GetPlaySeekable() (core.PlaySeekable, error) {
 		return nil, err
 	}
 
-	res := seekinghttp.New(vurl)
-	res.Client = &t.source.Client
+	res := seekablehttp.New(vurl, t.Format.Clen)
 
 	if size, err := res.Size(); err != nil {
 		return nil, err
@@ -80,13 +79,17 @@ func (t Track) GetPlaySeekable() (core.PlaySeekable, error) {
 		return nil, errors.New("got an empty request")
 	}
 	if strings.Split(t.Format.Type, ";")[0] == "audio/webm" {
-		parser, err := webm.NewParser(res)
+		parser, err := webm.New(res)
 
 		if err != nil {
 			return nil, err
 		}
 
 		file, err := parser.Parse()
+		if err != nil {
+			panic(err)
+			return nil, err
+		}
 		return file, nil
 	} else {
 		return nil, errors.New("mime type not supported")

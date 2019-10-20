@@ -22,7 +22,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-package mp4
+package mpeg
 
 import (
 	"golang.org/x/text/encoding/charmap"

@@ -29,9 +29,9 @@ package webm
 import (
 	"errors"
 	"fmt"
-	"github.com/dondish/lionplayer/core"
 	"github.com/ebml-go/ebml"
 	"io"
+	"lionplayer/core"
 	"time"
 )
 
@@ -63,8 +63,13 @@ type Parser struct {
 	*ebml.Element
 }
 
+type CuePoint struct {
+	timecode  uint64
+	positions []uint64
+}
+
 // Returns a new parser instance for this input stream
-func NewParser(rs io.ReadSeeker) (*Parser, error) {
+func New(rs io.ReadSeeker) (*Parser, error) {
 	var e *ebml.Element
 	e, err := ebml.RootElement(rs)
 	if err != nil {
@@ -74,7 +79,7 @@ func NewParser(rs io.ReadSeeker) (*Parser, error) {
 }
 
 // Parses the SeekHead and returns the position of the Cues element in the segment
-func (p *Parser) parseMetaSeek(seekhead *ebml.Element) (uint64, error) {
+func parseMetaSeek(seekhead *ebml.Element) (uint64, error) {
 	for seek, err := seekhead.Next(); err == nil; seek, err = seekhead.Next() {
 		var rseek Seek
 		err = seek.Unmarshal(&rseek)
@@ -89,7 +94,7 @@ func (p *Parser) parseMetaSeek(seekhead *ebml.Element) (uint64, error) {
 }
 
 // Parses a Tracks element and returns the track-ids found in each TrackEntry
-func (p *Parser) parseTracks(tracks *ebml.Element) ([]uint64, error) {
+func parseTracks(tracks *ebml.Element) ([]uint64, error) {
 	tracknumbers := make([]uint64, 0)
 	var te TrackEntry
 	for trackentry, err := tracks.Next(); err == nil; trackentry, err = tracks.Next() {
@@ -134,7 +139,7 @@ func (p *Parser) Parse() (core.PlaySeekable, error) {
 	for el, err := segment.Next(); err == nil; el, err = segment.Next() {
 		switch el.Id {
 		case 0x114D9B74: // SeekHead
-			pos, err := p.parseMetaSeek(el)
+			pos, err := parseMetaSeek(el)
 			if err != nil {
 				return nil, err
 			}
@@ -148,7 +153,7 @@ func (p *Parser) Parse() (core.PlaySeekable, error) {
 			}
 			goto Finish
 		case 0x1654AE6B: // Tracks
-			tracks, err := p.parseTracks(el)
+			tracks, err := parseTracks(el)
 			if err != nil {
 				return nil, err
 			}
@@ -157,11 +162,13 @@ func (p *Parser) Parse() (core.PlaySeekable, error) {
 			}
 			t.tracks = append(t.tracks, tracks...)
 			t.trackId = t.tracks[0]
+		case 0x1C53BB6B: // Cues
+			t.cuepoints, err = parseCues(el, len(t.tracks))
+			if err != nil {
+				return nil, err
+			}
 		}
-		_, err = p.Seek(el.Size(), 1)
-	}
-	if err != nil {
-		return nil, err
+		_, err = segment.Seek(el.Size(), 1)
 	}
 Finish:
 	return t, nil
