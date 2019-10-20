@@ -1,7 +1,7 @@
 package mpeg
 
 import (
-	"lionplayer/core"
+	"github.com/dondish/lionplayer/core"
 )
 
 type Track struct {

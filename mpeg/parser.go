@@ -26,8 +26,8 @@ package mpeg
 
 import (
 	"errors"
+	"github.com/dondish/lionplayer/core"
 	"io"
-	"lionplayer/core"
 )
 
 type TrackEntry struct {
