@@ -1,4 +1,4 @@
-module lionplayer
+module github.com/dondish/lionplayer
 
 go 1.13
 
