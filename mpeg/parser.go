@@ -22,6 +22,8 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
+// Package mpeg simplifies the parsing of the MP4 and other related MPEG file formats
+// Reference: http://l.web.umkc.edu/lizhu/teaching/2016sp.video-communication/ref/mp4.pdf
 package mpeg
 
 import (
@@ -30,35 +32,119 @@ import (
 	"io"
 )
 
+//
 type TrackEntry struct {
 	Id      uint32
 	Handler string
 }
 
+// Parser reads and decodes data from an inputstream to create a playable instance
 type Parser struct {
 	*Element
 	isFragmented bool
+	ft           *FragmentedTrack
+	st           *StandardTrack
+	moovReached  bool // On fragmented MP4 free might be sooner than moov
 	sampleTables []*Element
 }
 
 // Creates a new Parser
 func New(rs io.ReadSeeker, length int64) *Parser {
+	t := &Track{}
 	return &Parser{Element: &Element{
 		R:      rs,
 		N:      length,
 		Offset: 0,
 		Id:     "root",
 		intbuf: make([]byte, 4),
-	}, sampleTables: make([]*Element, 0)}
+	},
+		sampleTables: make([]*Element, 0),
+		ft:           &FragmentedTrack{Track: t},
+		st:           &StandardTrack{Track: t},
+	}
 }
 
-func (p *Parser) handleMdia(track *Track, trak *Element) error {
+// Handle a Sample Table Box element
+func (p *Parser) handleStbl(te *TrackEntry, stbl *Element) error {
 	var el *Element
 	var err error
-	te := TrackEntry{
-		Id:      0,
-		Handler: "",
+	for el, err = stbl.Next(); err == nil; el, err = stbl.Next() {
+		switch el.Id {
+		case "stsd":
+			err = el.ParseFlags()
+			if err != nil {
+				return err
+			}
+
+		}
+		err = el.Skip()
 	}
+	return err
+}
+
+// Handles a Media Information Box element
+func (p *Parser) handleMinf(te *TrackEntry, minf *Element) error {
+	var el *Element
+	var err error
+	for el, err = minf.Next(); err == nil; el, err = minf.Next() {
+		switch el.Id {
+		case "stbl":
+			err = p.handleStbl(te, minf)
+			if err != nil {
+				return err
+			}
+		}
+		err = el.Skip()
+	}
+	return err
+}
+
+// Handles a Media Box element
+func (p *Parser) handleMdia(te *TrackEntry, mdia *Element) error {
+	var el *Element
+	var err error
+	for el, err = mdia.Next(); err == nil; el, err = mdia.Next() {
+		switch el.Id {
+		case "hdlr": // Handler Reference Box
+			err = el.ParseFlags()
+			if err != nil {
+				return err
+			}
+			_, err = el.R.Seek(4, 1) // skip over the pre_defined property
+			if err != nil {
+				return err
+			}
+			te.Handler, err = el.readType() // should be soun for sounds
+			if err != nil {
+				return err
+			}
+		case "mdhd": // Media Header Box
+			err = el.ParseFlags()
+			if err != nil {
+				return err
+			}
+			if el.Version == 1 {
+				_, err = el.R.Seek(16, 1) // Seek over creation time and modification time
+			} else {
+				_, err = el.R.Seek(8, 1) // Seek over creation time and modification time
+			}
+			if err != nil {
+				return err
+			}
+			timescale, err := el.readInt32()
+			if err != nil {
+				return err
+			}
+			p.st.TimeScales[int(te.Id)] = int(timescale)
+		}
+		err = el.Skip()
+	}
+	return err
+}
+
+func (p *Parser) handleTrak(te *TrackEntry, trak *Element) error {
+	var el *Element
+	var err error
 	for el, err = trak.Next(); err == nil; el, err = trak.Next() {
 		switch el.Id {
 		case "tkhd":
@@ -84,47 +170,23 @@ func (p *Parser) handleMdia(track *Track, trak *Element) error {
 	return err
 }
 
-//func (p *Parser) handleMinf(minf *Element) error {
-//
-//}
-
-func (p *Parser) handleTrak(te *TrackEntry, trak *Element) error {
-	var el *Element
-	var err error
-	for el, err = trak.Next(); err == nil; el, err = trak.Next() {
-		switch el.Id {
-		case "hdlr":
-			err = el.ParseFlags()
-			if err != nil {
-				return err
-			}
-			_, err = el.R.Seek(4, 1)
-			if err != nil {
-				return err
-			}
-			te.Handler, err = el.readType()
-			if err != nil {
-				return err
-			}
-		}
-		err = el.Skip()
-	}
-	return err
-}
-
 func (p *Parser) handleMoov(track *Track, moov *Element) error {
 	var el *Element
 	var err error
-	te := &TrackEntry{
-		Id:      0,
-		Handler: "",
-	}
+	track.Tracks = make([]TrackEntry, 0)
 	for el, err = moov.Next(); err == nil; el, err = moov.Next() {
 		switch el.Id {
 		case "trak":
+			te := &TrackEntry{
+				Id:      0,
+				Handler: "",
+			}
 			err = p.handleTrak(te, el)
 			if err != nil {
 				return err
+			}
+			if te.Handler == "soun" {
+				track.Tracks = append(track.Tracks, *te)
 			}
 		}
 		err = el.Skip()
@@ -145,18 +207,16 @@ func (p *Parser) Parse() (core.Playable, error) {
 	if err != nil {
 		return nil, err
 	}
-	track := &Track{
-		Tracks:   make([]TrackEntry, 0),
-		Root:     p.Element,
-		Metadata: make(map[string]interface{}),
-	}
 	for el, err := p.Next(); err == nil; el, err = p.Next() {
 		switch el.Id {
 		case "mdat", "free":
-			_, err = p.R.Seek(el.Offset, 0)
-			goto Finish
+			if p.moovReached {
+				_, err = p.R.Seek(el.Offset, 0)
+				goto Finish
+			}
 		case "moov":
-			err = p.handleMoov(track, el)
+			p.moovReached = true
+			err = p.handleMoov(p.st.Track, el)
 			if err != nil {
 				return nil, err
 			}
@@ -164,5 +224,9 @@ func (p *Parser) Parse() (core.Playable, error) {
 		err = el.Skip()
 	}
 Finish:
-	return track, nil
+	if p.isFragmented {
+		return p.ft, nil
+	} else {
+		return p.st, nil
+	}
 }

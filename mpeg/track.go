@@ -34,6 +34,18 @@ type Track struct {
 	Metadata map[string]interface{}
 }
 
+func (t Track) SampleRate() int {
+	panic("implement me")
+}
+
+func (t Track) Channels() int {
+	panic("implement me")
+}
+
+func (t Track) Codec() string {
+	panic("implement me")
+}
+
 func (t Track) Close() error {
 	panic("implement me")
 }
@@ -48,12 +60,4 @@ func (t Track) Play() {
 
 func (t Track) Pause(bool) {
 	panic("implement me")
-}
-
-type StandardTrack struct {
-	Track
-}
-
-type FragmentedTrack struct {
-	Track
 }
