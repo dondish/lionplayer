@@ -37,35 +37,27 @@ type Track struct {
 	VideoId  string
 	Title    string
 	Author   string
-	Duration time.Duration
+	Length   time.Duration
 	IsStream bool
 	source   *Source
 	Format   *Format
 }
 
-func (t Track) GetBitrate() int {
-	return int(t.Format.Bitrate)
-}
-
-func (t Track) GetChannels() int {
-	return 2
-}
-
-func (t Track) GetCodec() string {
+func (t Track) Codec() string {
 	return strings.Trim(strings.Split(t.Format.Type, "=")[1], "\"")
 }
 
-func (t Track) GetDuration() time.Duration {
-	return t.Duration
+func (t Track) Duration() time.Duration {
+	return t.Length
 }
 
 // Return a playable of this track that can be played.
-func (t Track) GetPlayable() (core.Playable, error) {
-	return t.GetPlaySeekable()
+func (t Track) Playable() (core.Playable, error) {
+	return t.PlaySeekable()
 }
 
 // Return a playseekable of this track that can be played.
-func (t Track) GetPlaySeekable() (core.PlaySeekable, error) {
+func (t Track) PlaySeekable() (core.PlaySeekable, error) {
 	vurl, err := t.Format.GetValidUrl()
 	if err != nil {
 		return nil, err

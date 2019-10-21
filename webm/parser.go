@@ -32,6 +32,7 @@ import (
 	"github.com/dondish/lionplayer/core"
 	"github.com/ebml-go/ebml"
 	"io"
+	"strings"
 	"time"
 )
 
@@ -49,6 +50,13 @@ type Tracks struct {
 // https://matroska.org/technical/specs/index.html#TrackEntry
 type TrackEntry struct {
 	TrackNumber uint64 `ebml:"D7"`
+	CodecID     string `ebml:"86"`
+	Audio       `ebml:"E1"`
+}
+
+type Audio struct {
+	SamplingFrequency float64 `ebml:"B5"`
+	Channels          uint    `ebml:"9F"`
 }
 
 // Contains a single seek entry to an EBML Element.
@@ -94,15 +102,17 @@ func parseMetaSeek(seekhead *ebml.Element) (uint64, error) {
 }
 
 // Parses a Tracks element and returns the track-ids found in each TrackEntry
-func parseTracks(tracks *ebml.Element) ([]uint64, error) {
-	tracknumbers := make([]uint64, 0)
+func parseTracks(tracks *ebml.Element) ([]TrackEntry, error) {
+	tracknumbers := make([]TrackEntry, 0)
 	var te TrackEntry
 	for trackentry, err := tracks.Next(); err == nil; trackentry, err = tracks.Next() {
 		err = trackentry.Unmarshal(&te)
 		if err != nil {
 			return nil, err
 		}
-		tracknumbers = append(tracknumbers, te.TrackNumber)
+		if te.Audio.Channels != 0 {
+			tracknumbers = append(tracknumbers, te)
+		}
 	}
 	return tracknumbers, nil
 }
@@ -133,7 +143,6 @@ func (p *Parser) Parse() (core.PlaySeekable, error) {
 		parser:  p,
 		segment: segment,
 		cues:    0,
-		tracks:  make([]uint64, 0),
 		trackId: 0,
 	}
 	for el, err := segment.Next(); err == nil; el, err = segment.Next() {
@@ -153,15 +162,17 @@ func (p *Parser) Parse() (core.PlaySeekable, error) {
 			}
 			goto Finish
 		case 0x1654AE6B: // Tracks
-			tracks, err := parseTracks(el)
+			t.tracks, err = parseTracks(el)
 			if err != nil {
 				return nil, err
 			}
-			if len(tracks) == 0 {
+			if len(t.tracks) == 0 {
 				return nil, errors.New("no tracks found in segment")
 			}
-			t.tracks = append(t.tracks, tracks...)
-			t.trackId = t.tracks[0]
+			t.trackId = t.tracks[0].TrackNumber
+			t.channels = int(t.tracks[0].Channels)
+			t.codec = strings.ToLower(strings.TrimPrefix(t.tracks[0].CodecID, "A_"))
+			t.samplerate = int(t.tracks[0].SamplingFrequency)
 		case 0x1C53BB6B: // Cues
 			t.cuepoints, err = parseCues(el, len(t.tracks))
 			if err != nil {

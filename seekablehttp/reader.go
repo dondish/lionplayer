@@ -1,15 +1,37 @@
-package seekablehttp
+/*
+MIT License
+
+Copyright (c) 2019 Oded Shapira
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+*/
 
 /*
-Reimplementation of https://github.com/jeffallen/seekinghttp/
-WITHOUT cache (slows down more than it helps)
-INSTEAD use buffered input and mostly refrain from making too big of skips.
+Reimplementation of https://github.com/jeffallen/seekinghttp/ with buffered readers and smart seeking.
 */
+package seekablehttp
 
 import (
 	"bufio"
 	"errors"
 	"fmt"
+	"github.com/dondish/lionplayer/core"
 	"io"
 	"math"
 	"net/http"
@@ -20,10 +42,9 @@ import (
 // SeekingHTTP uses a series of HTTP GETs with Range headers
 // to implement io.ReadSeeker and io.ReaderAt.
 type SeekingHTTP struct {
-	URL     string
-	Client  *http.Client
-	Debug   bool
-	url     *url.URL
+	URL     string       // The URL to connect to
+	Client  *http.Client // The HTTP DefaultHTTPClient to use (allows of client reuse)
+	url     *url.URL     // The url.URL representation of SeekingHTTP.Url
 	offset  int64
 	resp    io.ReadCloser
 	respbuf *bufio.Reader
@@ -31,8 +52,18 @@ type SeekingHTTP struct {
 	open    bool
 }
 
+// Closes the client and frees up resources
 func (s *SeekingHTTP) Close() error {
+	s.respbuf = nil
+	s.Client = nil
+	s.url = nil
+	return s.close()
+}
+
+// Internal connection closing used for seeks above the current buffer limit
+func (s *SeekingHTTP) close() error {
 	if s.open {
+		core.ReleaseBufferedReader(s.respbuf)
 		s.open = false
 		return s.resp.Close()
 	}
@@ -44,7 +75,7 @@ var _ io.ReadSeeker = (*SeekingHTTP)(nil)
 var _ io.ReaderAt = (*SeekingHTTP)(nil)
 
 // New initializes a SeekingHTTP for the given URL.
-// The SeekingHTTP.Client field may be set before the first call
+// The SeekingHTTP.DefaultHTTPClient field may be set before the first call
 // to Read or Seek.
 func New(url string, length int64) *SeekingHTTP {
 	return &SeekingHTTP{
@@ -54,6 +85,7 @@ func New(url string, length int64) *SeekingHTTP {
 	}
 }
 
+// Creates a new requests with the built template
 func (s *SeekingHTTP) newreq() (*http.Request, error) {
 	var err error
 	if s.url == nil {
@@ -74,6 +106,7 @@ func (s *SeekingHTTP) newreq() (*http.Request, error) {
 	}, nil
 }
 
+// Formats the range header
 func fmtRange(from int64) string {
 	return fmt.Sprintf("bytes=%v-", from)
 }
@@ -99,11 +132,7 @@ func (s *SeekingHTTP) ReadAt(buf []byte, off int64) (int, error) {
 		if resp.StatusCode == http.StatusOK || resp.StatusCode == http.StatusPartialContent {
 			s.resp = resp.Body
 			s.open = true
-			if s.respbuf == nil {
-				s.respbuf = bufio.NewReader(s.resp)
-			} else {
-				s.respbuf.Reset(s.resp)
-			}
+			s.respbuf = core.AcquireBufferedReader(s.resp)
 		}
 	}
 	return s.respbuf.Read(buf)
@@ -112,12 +141,13 @@ func (s *SeekingHTTP) ReadAt(buf []byte, off int64) (int, error) {
 // If they did not give us an HTTP Client, use the default one.
 func (s *SeekingHTTP) init() error {
 	if s.Client == nil {
-		s.Client = http.DefaultClient
+		s.Client = core.DefaultHTTPClient
 	}
 
 	return nil
 }
 
+// ReadAt reads len(buf) bytes into buf
 func (s *SeekingHTTP) Read(buf []byte) (int, error) {
 	n, err := s.ReadAt(buf, s.offset)
 	if err == nil {
@@ -153,7 +183,7 @@ func (s *SeekingHTTP) Seek(offset int64, whence int) (int64, error) {
 			return 0, err
 		}
 	} else {
-		err := s.Close()
+		err := s.close()
 		if err != nil {
 			return 0, err
 		}

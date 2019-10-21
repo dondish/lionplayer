@@ -22,6 +22,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
+// Package core defines the basic implementation of common data structures used by and exported from lionplayer
 package core
 
 import (
@@ -36,11 +37,15 @@ type Packet struct {
 }
 
 // The basic interface of a playable interface
+// Playable should not be copied and passed but instead should be used by the player itself
 type Playable interface {
 	io.Closer            // Will be used to stop the track
-	Chan() <-chan Packet // returns the output channel
+	Chan() <-chan Packet // Returns the output channel
 	Play()               // Start this function in a new coroutine, it feeds the channel data
 	Pause(bool)          // Whether to pause or unpause
+	SampleRate() int     // Returns the sampling frequency in Hz
+	Channels() int       // Returns the amount of channels
+	Codec() string       // Returns the codec (lowercase) (for example: opus)
 }
 
 // The interface of a playable that can be seek in
@@ -50,16 +55,16 @@ type PlaySeekable interface {
 }
 
 // An interface for a track
+// A track is not played directly and can be passed by multiple nodes
 type Track interface {
-	GetPlayable() (Playable, error)
-	GetBitrate() int
-	GetChannels() int
-	GetCodec() string
-	GetDuration() time.Duration
+	Playable() (Playable, error) // Get a playable matching this track. Can be called multiple times to extract a new Playable each time.
+	Bitrate() int                // Returns the bitrate the track will use
+	Codec() string               // Returns the codec the playable is encoded in
+	Duration() time.Duration     // Returns the duration of the track
 }
 
 // An interface for a track that can be seeked
 type SeekableTrack interface {
 	Track
-	GetPlaySeekable() (PlaySeekable, error)
+	PlaySeekable() (PlaySeekable, error)
 }

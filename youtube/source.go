@@ -29,6 +29,7 @@ package youtube
 import (
 	"encoding/json"
 	"errors"
+	"github.com/dondish/lionplayer/core"
 	"math"
 	"net/http"
 	"regexp"
@@ -37,15 +38,20 @@ import (
 )
 
 type Source struct {
-	Client http.Client
+	Client *http.Client
 }
 
-// Create the Source
-func NewSource() *Source {
-	return &Source{Client: http.Client{}}
+// Create a new Source
+// Passing a client is optional
+func New(client *http.Client) *Source {
+	if client == nil {
+		return &Source{Client: core.DefaultHTTPClient}
+	}
+	return &Source{Client: client}
 }
 
 // Play a video by a video id
+// Returns a youtube track that implements core.Track
 func (yt Source) PlayVideo(videoId string) (*Track, error) {
 	req, err := http.NewRequest("GET", "https://www.youtube.com/watch?v="+videoId+"&pbj=1&hl=en", nil)
 	if err != nil {
@@ -103,7 +109,7 @@ func (yt Source) PlayVideo(videoId string) (*Track, error) {
 			VideoId:  videoId,
 			Title:    vDetails["title"].(string),
 			Author:   vDetails["author"].(string),
-			Duration: duration,
+			Length:   duration,
 			IsStream: isStream,
 			Format:   format,
 			source:   &yt,
@@ -117,6 +123,9 @@ var (
 	WatchUrl, _ = regexp.Compile("(?:https?://)?(?:www\\.)?(?:youtu\\.be/|youtube\\.com(?:/embed/|/v/|/watch.+v=))([\\w-_]{10,12})(?: [^\"& ]+)?")
 )
 
+// Play a video by a video url
+// Internally it extracts the videoID and calls PlayVideo
+// Returns a youtube track that implements core.Track
 func (yt Source) PlayVideoUrl(videoUrl string) (*Track, error) {
 	matches := WatchUrl.FindStringSubmatch(videoUrl)
 	if len(matches) >= 2 {
@@ -125,6 +134,7 @@ func (yt Source) PlayVideoUrl(videoUrl string) (*Track, error) {
 	return nil, errors.New("unable to extract the video id")
 }
 
+// Extracts the VideoId out of the URL
 func (yt Source) ExtractVideoId(videoUrl string) (string, error) {
 	matches := WatchUrl.FindStringSubmatch(videoUrl)
 	if len(matches) >= 2 {
@@ -133,6 +143,7 @@ func (yt Source) ExtractVideoId(videoUrl string) (string, error) {
 	return "", errors.New("unable to extract the video id")
 }
 
+// Checks whether a video URL is valid
 func (yt Source) CheckVideoUrl(videoUrl string) bool {
 	return WatchUrl.MatchString(videoUrl)
 }

@@ -64,14 +64,29 @@ type Cluster struct {
 // The track implements the core.Playable and core.PlaySeekable interface,
 // Although seeking in a live-stream will return an error.
 type Track struct {
-	Output    chan core.Packet   // Output channel of Packet instances
-	seek      chan time.Duration // signal channel
-	parser    *Parser            // The parser responsible for this Track
-	segment   *ebml.Element      // The segment
-	cues      int64              // the position of the cues element
-	cuepoints []CuePoint         // saved cuepoints
-	tracks    []uint64           // all of the tracks' ids
-	trackId   uint64             // the current track id
+	Output     chan core.Packet   // Output channel of Packet instances
+	seek       chan time.Duration // signal channel
+	parser     *Parser            // The parser responsible for this Track
+	segment    *ebml.Element      // The segment
+	cues       int64              // the position of the cues element
+	cuepoints  []CuePoint         // saved cuepoints
+	tracks     []TrackEntry       // all of the tracks' ids
+	trackId    uint64             // the current track id
+	samplerate int                // the sample rate
+	channels   int                // the channel count
+	codec      string             // the codec the playable returns
+}
+
+func (t Track) SampleRate() int {
+	return t.samplerate
+}
+
+func (t Track) Channels() int {
+	return t.channels
+}
+
+func (t Track) Codec() string {
+	return t.codec
 }
 
 // Contain positions for different tracks corresponding to the timestamp.
@@ -96,6 +111,8 @@ func (t Track) Pause(b bool) {
 // Stops the given track
 // Resources should be picked up by the GC and cleaned
 func (t Track) Close() error {
+	t.segment = nil
+	t.parser = nil
 	t.seek <- shutdown
 	return nil
 }

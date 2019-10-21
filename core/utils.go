@@ -22,38 +22,51 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-package mpeg
+package core
 
 import (
-	"github.com/dondish/lionplayer/core"
+	"bufio"
+	"io"
+	"net/http"
+	"sync"
+	"time"
 )
 
-type Track struct {
-	Tracks   []TrackEntry
-	Root     *Element
-	Metadata map[string]interface{}
+// The default http client
+// Prevents creation of multiple clients by default
+var DefaultHTTPClient = &http.Client{
+	Timeout: 10 * time.Second,
 }
 
-func (t Track) Close() error {
-	panic("implement me")
+// A struct that implements io.Reader that does nothing
+// Should not be called and it is used for pooled buffers.
+type noopReader struct {
 }
 
-func (t Track) Chan() <-chan core.Packet {
-	panic("implement me")
+var noopSingleton = &noopReader{}
+
+func (n2 noopReader) Read(p []byte) (n int, err error) {
+	return 0, nil
 }
 
-func (t Track) Play() {
-	panic("implement me")
+// A pool of buffered readers
+var bufReaderPool = &sync.Pool{
+	New: func() interface{} {
+		return bufio.NewReader(noopSingleton)
+	},
 }
 
-func (t Track) Pause(bool) {
-	panic("implement me")
+// Acquire a new bufio.Reader from the pool
+// This method of reader reuse prevents GC pressure and maintains low memory overhead
+func AcquireBufferedReader(reader io.Reader) *bufio.Reader {
+	buf := bufReaderPool.Get().(*bufio.Reader)
+	buf.Reset(reader)
+	return buf
 }
 
-type StandardTrack struct {
-	Track
-}
-
-type FragmentedTrack struct {
-	Track
+// Return a bufio.Reader to the pool
+// This method of reader reuse prevents GC pressure and maintains low memory overhead
+func ReleaseBufferedReader(buf *bufio.Reader) {
+	buf.Reset(noopSingleton)
+	bufReaderPool.Put(buf)
 }

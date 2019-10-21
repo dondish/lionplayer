@@ -51,7 +51,7 @@ func init() {
 
 var token string
 
-var ytsrc = youtube.NewSource()
+var ytsrc = youtube.New(nil)
 var track core.PlaySeekable
 var lastpacket core.Packet
 
@@ -272,12 +272,12 @@ func playSound(s *discordgo.Session, guildID, channelID, videoId, msgchannel str
 	if trac.IsStream {
 		_, err = s.ChannelMessageSend(msgchannel, fmt.Sprintf("Now Playing - %s - %s [LIVE]", trac.Title, trac.Author))
 	} else {
-		_, err = s.ChannelMessageSend(msgchannel, fmt.Sprintf("Now Playing - %s - %s [%s]", trac.Title, trac.Author, trac.Duration))
+		_, err = s.ChannelMessageSend(msgchannel, fmt.Sprintf("Now Playing - %s - %s [%s]", trac.Title, trac.Author, trac.Length))
 	}
 	if err != nil {
 		return err
 	}
-	file, err := trac.GetPlaySeekable()
+	file, err := trac.PlaySeekable()
 
 	if err != nil {
 		return err
