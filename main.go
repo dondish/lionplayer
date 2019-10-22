@@ -52,7 +52,7 @@ func init() {
 var token string
 
 var ytsrc = youtube.New(nil)
-var track core.PlaySeekable
+var tracks = make(map[string]core.Playable)
 var lastpacket core.Packet
 
 func main() {
@@ -111,7 +111,8 @@ func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 	}
 
 	// check if the message is "!airhorn"
-	if strings.HasPrefix(m.Content, "!!play") && track == nil {
+	track, ok := tracks[m.GuildID]
+	if strings.HasPrefix(m.Content, "!!play") && !ok {
 		// Find the channel that the message came from.
 		c, err := s.State.Channel(m.ChannelID)
 		if err != nil {
@@ -195,7 +196,16 @@ func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 			second, _ = strconv.Atoi(matches[3])
 		}
 		ms := time.Duration(hour)*time.Hour + time.Duration(minute)*time.Minute + time.Duration(second)*time.Second
-		_ = track.Seek(ms)
+		trackseek, ok := track.(core.PlaySeekable)
+		if ok {
+			_ = trackseek.Seek(ms)
+		} else {
+			_, err := s.ChannelMessageSend(c.ID, "Track is not seekable")
+			if err != nil {
+				return
+			}
+			return
+		}
 	} else if strings.HasPrefix(m.Content, "!!pause") {
 		if track != nil {
 			track.Pause(true)
@@ -282,7 +292,7 @@ func playSound(s *discordgo.Session, guildID, channelID, videoId, msgchannel str
 	if err != nil {
 		return err
 	}
-	track = file
+	tracks[guildID] = file
 	go file.Play()
 	c := file.Chan()
 	for {
@@ -298,7 +308,7 @@ func playSound(s *discordgo.Session, guildID, channelID, videoId, msgchannel str
 		vc.OpusSend <- packet.Data
 	}
 
-	track = nil
+	delete(tracks, guildID)
 
 	return nil
 }
