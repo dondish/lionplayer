@@ -37,11 +37,13 @@ TrackEntry represents an MPEG track.
 There can be multiple in each track.
 */
 type TrackEntry struct {
-	Id      uint32
-	Handler string
+	Id         uint32
+	Handler    string
+	Channels   uint16
+	SampleRate uint32
 }
 
-// Parser reads and decodes data from an inputstream to create a playable instance.
+// Parser reads and decodes data from an input stream to create a playable instance.
 type Parser struct {
 	*Element
 	// Whether the track is fragmented.
@@ -71,6 +73,53 @@ func New(rs io.ReadSeeker, length int64) *Parser {
 	}
 }
 
+// handleSoun handles an AudioSampleEntry element.
+func (p *Parser) handleSoun(te *TrackEntry, soun *Element) error {
+	err := soun.ParseFlags()
+	if err != nil {
+		return err
+	}
+	_, err = soun.R.Seek(12, 1)
+	if err != nil {
+		return err
+	}
+	te.Channels, err = soun.readInt16()
+	if err != nil {
+		return err
+	}
+	_, err = soun.R.Seek(4, 1)
+	if err != nil {
+		return err
+	}
+	te.SampleRate, err = soun.readInt32()
+	return err
+}
+
+// handleStsd handles an Sample Description Box element.
+func (p *Parser) handleStsd(te *TrackEntry, stsd *Element) error {
+	err := stsd.ParseFlags()
+	if err != nil {
+		return err
+	}
+	entrycount, err := stsd.readInt32()
+	if err != nil {
+		return err
+	}
+	if entrycount > 0 {
+		codec, err := stsd.Next()
+		if err != nil {
+			return err
+		}
+		if te.Handler == "soun" {
+			err = p.handleSoun(te, codec)
+			if err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
 // handleStbl handles a Sample Table Box element.
 func (p *Parser) handleStbl(te *TrackEntry, stbl *Element) error {
 	var el *Element
@@ -78,11 +127,10 @@ func (p *Parser) handleStbl(te *TrackEntry, stbl *Element) error {
 	for el, err = stbl.Next(); err == nil; el, err = stbl.Next() {
 		switch el.Id {
 		case "stsd":
-			err = el.ParseFlags()
+			err = p.handleStsd(te, el)
 			if err != nil {
 				return err
 			}
-
 		}
 		err = el.Skip()
 	}
@@ -106,6 +154,28 @@ func (p *Parser) handleMinf(te *TrackEntry, minf *Element) error {
 	return err
 }
 
+// handleMdhd handles a Media Header Box element.
+func (p *Parser) handleMdhd(te *TrackEntry, mdhd *Element) error {
+	err := mdhd.ParseFlags()
+	if err != nil {
+		return err
+	}
+	if mdhd.Version == 1 {
+		_, err = mdhd.R.Seek(16, 1) // Seek over creation time and modification time
+	} else {
+		_, err = mdhd.R.Seek(8, 1) // Seek over creation time and modification time
+	}
+	if err != nil {
+		return err
+	}
+	timescale, err := mdhd.readInt32()
+	if err != nil {
+		return err
+	}
+	p.st.TimeScales[int(te.Id)] = int(timescale)
+	return nil
+}
+
 // handleMdia handles a Media Box element.
 func (p *Parser) handleMdia(te *TrackEntry, mdia *Element) error {
 	var el *Element
@@ -126,23 +196,7 @@ func (p *Parser) handleMdia(te *TrackEntry, mdia *Element) error {
 				return err
 			}
 		case "mdhd": // Media Header Box
-			err = el.ParseFlags()
-			if err != nil {
-				return err
-			}
-			if el.Version == 1 {
-				_, err = el.R.Seek(16, 1) // Seek over creation time and modification time
-			} else {
-				_, err = el.R.Seek(8, 1) // Seek over creation time and modification time
-			}
-			if err != nil {
-				return err
-			}
-			timescale, err := el.readInt32()
-			if err != nil {
-				return err
-			}
-			p.st.TimeScales[int(te.Id)] = int(timescale)
+			err = p.handleMdhd(te, el)
 		}
 		err = el.Skip()
 	}

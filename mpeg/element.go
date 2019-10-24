@@ -66,7 +66,7 @@ func parseInt(data []byte) uint64 {
 
 func (e *Element) readInt64() (uint64, error) {
 	n, err := io.ReadFull(e.R, e.intbuf)
-	if n == 1 && e.intbuf[0] == 0b1111 {
+	if n == 1 && e.intbuf[0] == 255 {
 		return 0, io.EOF
 	}
 	if err != nil {
@@ -76,11 +76,19 @@ func (e *Element) readInt64() (uint64, error) {
 }
 
 func (e *Element) readInt32() (uint32, error) {
+	_, err := io.ReadFull(e.R, e.intbuf[:4])
+	if err != nil {
+		return 0, err
+	}
+	return uint32(parseInt(e.intbuf[:4])), nil
+}
+
+func (e *Element) readInt16() (uint16, error) {
 	_, err := io.ReadFull(e.R, e.intbuf[:2])
 	if err != nil {
 		return 0, err
 	}
-	return uint32(parseInt(e.intbuf[:2])), nil
+	return uint16(parseInt(e.intbuf[:2])), nil
 }
 
 func (e *Element) Next() (*Element, error) {
