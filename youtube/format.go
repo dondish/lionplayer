@@ -94,15 +94,8 @@ func compileAndExtract(pattern, body string) (string, error) {
 	return strings.ReplaceAll(s[1], "$", "\\$"), nil
 }
 
-// GetValidUrl deciphers the signature if exists and returns the valid url.
-func (ytfmt *Format) GetValidUrl() (string, error) {
-	if ytfmt.Signature == "" {
-		return ytfmt.Url, nil
-	}
-	cache, ok := cipherCache.Load(ytfmt.PlayerScript)
-	if ok {
-		return cache.(string), nil
-	}
+// fetchCipher fetches the cipher code.
+func (ytfmt *Format) fetchCipher() (string, error) {
 	cipher, err := http.Get("https://s.ytimg.com" + ytfmt.PlayerScript)
 	if err != nil {
 		return "", err
@@ -111,53 +104,45 @@ func (ytfmt *Format) GetValidUrl() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	actions := CipherAct.FindStringSubmatch(string(x))
-	if len(actions) == 0 {
-		return "", errors.New("unable to decipher: couldn't find any submatches")
-	}
-	actionbody := actions[2]
+	return string(x), nil
+}
 
+// processFunctors finds the functors in the code and adds them to a list.
+func (ytfmt *Format) processFunctors(actionbody string) (string, string, string, string, []string, error) {
 	funcs := make([]string, 0)
 	revkey, err := compileAndExtract(CipherRev, actionbody)
 	if err != nil {
-		return "", err
+		return "", "", "", "", nil, err
 	}
 	if revkey != "" {
 		funcs = append(funcs, regexp.QuoteMeta(revkey))
 	}
 	slicekey, err := compileAndExtract(CipherSlice, actionbody)
 	if err != nil {
-		return "", err
+		return "", "", "", "", nil, err
 	}
 	if slicekey != "" {
 		funcs = append(funcs, regexp.QuoteMeta(slicekey))
 	}
 	splicekey, err := compileAndExtract(CipherSplice, actionbody)
 	if err != nil {
-		return "", err
+		return "", "", "", "", nil, err
 	}
 	if splicekey != "" {
 		funcs = append(funcs, regexp.QuoteMeta(splicekey))
 	}
 	swapkey, err := compileAndExtract(CipherSwap, actionbody)
 	if err != nil {
-		return "", err
+		return "", "", "", "", nil, err
 	}
 	if swapkey != "" {
 		funcs = append(funcs, regexp.QuoteMeta(swapkey))
 	}
-	extractor, err := regexp.Compile("(?:a=)?" + regexp.QuoteMeta(actions[1]) + CipherBefAcc + "(" +
-		strings.Join(funcs, "|") +
-		")" + CipherAftAcc + "\\(a,(\\d+)\\)")
-	if err != nil {
-		return "", err
-	}
-	functions := CipherFunc.FindStringSubmatch(string(x))
-	if len(functions) == 0 {
-		return "", errors.New("can't find decipher")
-	}
-	submatches := extractor.FindAllStringSubmatch(functions[1], -1)
+	return revkey, swapkey, slicekey, splicekey, funcs, nil
+}
 
+// decodeSignature decodes the signature using the functors.
+func (ytfmt *Format) decodeSignature(submatches [][]string, revkey, swapkey, slicekey, splicekey string) string {
 	tempurl := []byte(ytfmt.Signature)
 
 	for _, match := range submatches {
@@ -188,6 +173,49 @@ func (ytfmt *Format) GetValidUrl() (string, error) {
 			}
 		}
 	}
+	return string(tempurl)
+}
+
+// GetValidUrl deciphers the signature if exists and returns the valid url.
+func (ytfmt *Format) GetValidUrl() (string, error) {
+	if ytfmt.Signature == "" {
+		return ytfmt.Url, nil
+	}
+	cache, ok := cipherCache.Load(ytfmt.PlayerScript)
+	if ok {
+		return cache.(string), nil
+	}
+
+	x, err := ytfmt.fetchCipher()
+	if err != nil {
+		return "", err
+	}
+
+	actions := CipherAct.FindStringSubmatch(x)
+	if len(actions) == 0 {
+		return "", errors.New("unable to decipher: couldn't find any submatches")
+	}
+	actionbody := actions[2]
+
+	revkey, swapkey, slicekey, splicekey, funcs, err := ytfmt.processFunctors(actionbody)
+	if err != nil {
+		return "", err
+	}
+
+	extractor, err := regexp.Compile("(?:a=)?" + regexp.QuoteMeta(actions[1]) + CipherBefAcc + "(" +
+		strings.Join(funcs, "|") +
+		")" + CipherAftAcc + "\\(a,(\\d+)\\)")
+	if err != nil {
+		return "", err
+	}
+	functions := CipherFunc.FindStringSubmatch(x)
+	if len(functions) == 0 {
+		return "", errors.New("can't find decipher")
+	}
+	submatches := extractor.FindAllStringSubmatch(functions[1], -1)
+
+	tempurl := ytfmt.decodeSignature(submatches, revkey, swapkey, slicekey, splicekey)
+
 	uri, err := url.Parse(ytfmt.Url)
 	if err != nil {
 		return "", err

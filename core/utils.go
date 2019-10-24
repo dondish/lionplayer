@@ -32,7 +32,7 @@ import (
 	"time"
 )
 
-// The default http client.
+// DefaultHTTPClient is used as the default HTTP Client in lionplayer.
 //
 // Prevents creation of multiple clients by default.
 var DefaultHTTPClient = &http.Client{
@@ -45,7 +45,7 @@ var DefaultHTTPClient = &http.Client{
 type noopReader struct {
 }
 
-// The only instance of noopReader that should be created.
+// noopSingleton is the only instance of noopReader.
 var noopSingleton = &noopReader{}
 
 func (n2 noopReader) Read(p []byte) (n int, err error) {

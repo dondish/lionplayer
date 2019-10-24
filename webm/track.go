@@ -185,6 +185,8 @@ func parseCues(cues *ebml.Element, tracklen int) ([]CuePoint, error) {
 	cuepoints := make([]CuePoint, 0)
 	var tim *ebml.Element
 	var timecode uint64
+	var positions *ebml.Element
+	var poses []uint64
 	for el, err := cues.Next(); err == nil && el.Id == 0xBB; el, err = cues.Next() { // Go over the cuepoints
 		tim, err = el.Next()
 		if err != nil {
@@ -194,11 +196,14 @@ func parseCues(cues *ebml.Element, tracklen int) ([]CuePoint, error) {
 		if err != nil {
 			return nil, err
 		}
-		positions, err := el.Next()
+		positions, err = el.Next()
 		if err != nil {
 			return nil, err
 		}
-		poses, err := getClusterPositions(positions, tracklen)
+		poses, err = getClusterPositions(positions, tracklen)
+		if err != nil {
+			return nil, err
+		}
 		cuepoints = append(cuepoints, CuePoint{
 			timecode:  timecode,
 			positions: poses,

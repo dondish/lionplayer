@@ -126,21 +126,21 @@ func parseTracks(tracks *ebml.Element) ([]TrackEntry, error) {
 	return tracknumbers, nil
 }
 
-// Parse parses the webm file and returns a PlaySeekable.
-//
-// Seek is only supported on non-livestream tracks.
-func (p *Parser) Parse() (core.PlaySeekable, error) {
+// validateHeader validates whether the file is a matroska file.
+func (p *Parser) validateHeader() error {
 	ebmlh, err := p.Next()
 	if err != nil {
-		return nil, err
+		return err
 	}
 	if ebmlh.Id != 0x1A45DFA3 {
-		return nil, errors.New(fmt.Sprintf("no ebml header provided: %#x", ebmlh.Id))
+		return errors.New(fmt.Sprintf("no ebml header provided: %#x", ebmlh.Id))
 	}
 	_, err = p.Seek(ebmlh.Size(), 1)
-	if err != nil {
-		return nil, err
-	}
+	return err
+}
+
+// validateSegment validates whether the file is a matroska file.
+func (p *Parser) validateSegment() (*ebml.Element, error) {
 	segment, err := p.Next() // Segment
 	if err != nil {
 		return nil, err
@@ -148,6 +148,11 @@ func (p *Parser) Parse() (core.PlaySeekable, error) {
 	if segment.Id != 0x18538067 {
 		return nil, errors.New(fmt.Sprintf("got something that is not segment: %#x", segment.Id))
 	}
+	return segment, nil
+}
+
+// parseSegment parses the segment element (the headers) and returns a new track.
+func (p *Parser) parseSegment(segment *ebml.Element) (*Track, error) {
 	t := Track{
 		Output:  make(chan core.Packet),
 		seek:    make(chan time.Duration, 3),
@@ -171,7 +176,7 @@ func (p *Parser) Parse() (core.PlaySeekable, error) {
 			if err != nil {
 				return nil, err
 			}
-			goto Finish
+			return &t, nil
 		case 0x1654AE6B: // Tracks
 			t.tracks, err = parseTracks(el)
 			if err != nil {
@@ -192,7 +197,21 @@ func (p *Parser) Parse() (core.PlaySeekable, error) {
 		}
 		_, err = segment.Seek(el.Size(), 1)
 	}
-Finish:
-	return t, nil
+	return &t, nil
+}
+
+// Parse parses the webm file and returns a PlaySeekable.
+//
+// Seek is only supported on non-livestream tracks.
+func (p *Parser) Parse() (core.PlaySeekable, error) {
+	err := p.validateHeader()
+	if err != nil {
+		return nil, err
+	}
+	segment, err := p.validateSegment()
+	if err != nil {
+		return nil, err
+	}
+	return p.parseSegment(segment)
 
 }
