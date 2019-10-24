@@ -91,7 +91,7 @@ func compileAndExtract(pattern, body string) (string, error) {
 	if s == nil {
 		return "", nil
 	}
-	return strings.ReplaceAll(s[1], "$", "\\$"), nil
+	return strings.Replace(s[1], "$", "\\$", -1), nil
 }
 
 // fetchCipher fetches the cipher code.
