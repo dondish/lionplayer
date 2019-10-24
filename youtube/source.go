@@ -125,9 +125,9 @@ var (
 )
 
 // PlayVideoUrl plays a video using the video url given.
-// Returns a youtube track that implements core.Track
+// Returns a youtube track that implements core.Track.
 //
-// Internally it extracts the videoID and calls PlayVideo
+// Internally it extracts the videoID and calls PlayVideo.
 func (yt Source) PlayVideoUrl(videoUrl string) (*Track, error) {
 	matches := WatchUrl.FindStringSubmatch(videoUrl)
 	if len(matches) >= 2 {
@@ -136,7 +136,7 @@ func (yt Source) PlayVideoUrl(videoUrl string) (*Track, error) {
 	return nil, errors.New("unable to extract the video id")
 }
 
-// Extracts the VideoId out of the URL
+// ExtractVideoID extracts the video id out of the given URL.
 func (yt Source) ExtractVideoId(videoUrl string) (string, error) {
 	matches := WatchUrl.FindStringSubmatch(videoUrl)
 	if len(matches) >= 2 {
@@ -145,7 +145,7 @@ func (yt Source) ExtractVideoId(videoUrl string) (string, error) {
 	return "", errors.New("unable to extract the video id")
 }
 
-// Checks whether a video URL is valid
+// CheckVideoUrl returns whether the given video URL is a valid video URL.
 func (yt Source) CheckVideoUrl(videoUrl string) bool {
 	return WatchUrl.MatchString(videoUrl)
 }
