@@ -35,6 +35,7 @@ import (
 	"sync"
 )
 
+// Regular Expressions used by the Cipher decoder.
 var (
 	CipherVar    = "[a-zA-Z_\\$][a-zA-Z_0-9]*"
 	CipherVarDef = "\\\"?" + CipherVar + "\\\"?"
@@ -60,17 +61,25 @@ var (
 			"),?\\n?)+)\\};")
 )
 
+// The cipher cache.
 var cipherCache = sync.Map{}
 
-// Defines a youtube format
+// Format defines a youtube format.
 type Format struct {
-	Type         string // The audio codec and container used
-	Bitrate      int64  // The bitrate
-	Clen         int64  // The length of the content
-	Url          string // The direct URL (without signature)
-	Signature    string // The signature
-	SignatureKey string // The key in the query for the signature
-	PlayerScript string // The location of the JS to parse the signature
+	// The audio codec and container used.
+	Type string
+	// The bitrate.
+	Bitrate int64
+	// The length of the content in bytes.
+	Clen int64
+	// The direct URL (without signature).
+	Url string
+	// The signature.
+	Signature string
+	// The key in the query for the signature.
+	SignatureKey string
+	// The location of the JS to parse the signature.
+	PlayerScript string
 }
 
 func compileAndExtract(pattern, body string) (string, error) {
@@ -85,7 +94,7 @@ func compileAndExtract(pattern, body string) (string, error) {
 	return strings.ReplaceAll(s[1], "$", "\\$"), nil
 }
 
-// Decipher the signature if exists to get the valid url.
+// GetValidUrl deciphers the signature if exists and returns the valid url.
 func (ytfmt *Format) GetValidUrl() (string, error) {
 	if ytfmt.Signature == "" {
 		return ytfmt.Url, nil
@@ -190,8 +199,9 @@ func (ytfmt *Format) GetValidUrl() (string, error) {
 	return uri.String(), nil
 }
 
+// findBestFormat returns the best Format of the track.
+//
 // Currently supports only audio/webm with the opus codec.
-// It will support more codecs in the future
 func findBestFormat(args map[string]interface{}, js string) (*Format, error) {
 	adpt := strings.Split(args["adaptive_fmts"].(string), ",")
 

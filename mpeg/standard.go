@@ -1,7 +1,8 @@
 package mpeg
 
-// Non-Fragmented MP4 File
+// StandardTrack stores the headers of a non-fragmented MP4 File.
 type StandardTrack struct {
 	*Track
-	TimeScales map[int]int // The timescale of each track
+	// The timescale of each track
+	TimeScales map[int]int
 }

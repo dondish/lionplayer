@@ -23,7 +23,11 @@ SOFTWARE.
 */
 
 /*
+Package seekablehttp implements an HTTP Client that can seek inside http streams using range headers and an on-board buffer.
+
 Reimplementation of https://github.com/jeffallen/seekinghttp/ with buffered readers and smart seeking.
+
+This package makes use of the AcquireBufferReader and ReleaseBufferReader to reuse buffers and minimize GC pressure.
 */
 package seekablehttp
 
@@ -52,7 +56,7 @@ type SeekingHTTP struct {
 	open    bool
 }
 
-// Closes the client and frees up resources
+// Close closes the client and frees up resources
 func (s *SeekingHTTP) Close() error {
 	s.respbuf = nil
 	s.Client = nil
@@ -60,7 +64,7 @@ func (s *SeekingHTTP) Close() error {
 	return s.close()
 }
 
-// Internal connection closing used for seeks above the current buffer limit
+// close provides internal connection closing used for seeks above the current buffer limit
 func (s *SeekingHTTP) close() error {
 	if s.open {
 		core.ReleaseBufferedReader(s.respbuf)
@@ -85,7 +89,7 @@ func New(url string, length int64) *SeekingHTTP {
 	}
 }
 
-// Creates a new requests with the built template
+// newreq creates a new requests with the built template
 func (s *SeekingHTTP) newreq() (*http.Request, error) {
 	var err error
 	if s.url == nil {
@@ -106,7 +110,7 @@ func (s *SeekingHTTP) newreq() (*http.Request, error) {
 	}, nil
 }
 
-// Formats the range header
+// fmtRange formats the range header
 func fmtRange(from int64) string {
 	return fmt.Sprintf("bytes=%v-", from)
 }
@@ -138,7 +142,7 @@ func (s *SeekingHTTP) ReadAt(buf []byte, off int64) (int, error) {
 	return s.respbuf.Read(buf)
 }
 
-// If they did not give us an HTTP Client, use the default one.
+// init initializes the Client used if not already set
 func (s *SeekingHTTP) init() error {
 	if s.Client == nil {
 		s.Client = core.DefaultHTTPClient
@@ -147,7 +151,7 @@ func (s *SeekingHTTP) init() error {
 	return nil
 }
 
-// ReadAt reads len(buf) bytes into buf
+// Read reads len(buf) bytes into buf
 func (s *SeekingHTTP) Read(buf []byte) (int, error) {
 	n, err := s.ReadAt(buf, s.offset)
 	if err == nil {

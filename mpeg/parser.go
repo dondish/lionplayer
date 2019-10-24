@@ -22,8 +22,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-// Package mpeg simplifies the parsing of the MP4 and other related MPEG file formats
-// Reference: http://l.web.umkc.edu/lizhu/teaching/2016sp.video-communication/ref/mp4.pdf
+// Package mpeg simplifies the parsing of the MP4 and other related MPEG file formats.
 package mpeg
 
 import (
@@ -32,23 +31,31 @@ import (
 	"io"
 )
 
-//
+/*
+TrackEntry represents an MPEG track.
+
+There can be multiple in each track.
+*/
 type TrackEntry struct {
 	Id      uint32
 	Handler string
 }
 
-// Parser reads and decodes data from an inputstream to create a playable instance
+// Parser reads and decodes data from an inputstream to create a playable instance.
 type Parser struct {
 	*Element
+	// Whether the track is fragmented.
 	isFragmented bool
-	ft           *FragmentedTrack
-	st           *StandardTrack
-	moovReached  bool // On fragmented MP4 free might be sooner than moov
+	// The MPEG track types.
+	ft *FragmentedTrack
+	st *StandardTrack
+	// On fragmented MP4 free might be sooner than moov.
+	moovReached bool
+	// The sample tables to provide seeking.
 	sampleTables []*Element
 }
 
-// Creates a new Parser
+// New creates a new Parser using the given ReadSeeker.
 func New(rs io.ReadSeeker, length int64) *Parser {
 	t := &Track{}
 	return &Parser{Element: &Element{
@@ -64,7 +71,7 @@ func New(rs io.ReadSeeker, length int64) *Parser {
 	}
 }
 
-// Handle a Sample Table Box element
+// handleStbl handles a Sample Table Box element.
 func (p *Parser) handleStbl(te *TrackEntry, stbl *Element) error {
 	var el *Element
 	var err error
@@ -82,7 +89,7 @@ func (p *Parser) handleStbl(te *TrackEntry, stbl *Element) error {
 	return err
 }
 
-// Handles a Media Information Box element
+// handleMinf handles a Media Information Box element.
 func (p *Parser) handleMinf(te *TrackEntry, minf *Element) error {
 	var el *Element
 	var err error
@@ -99,7 +106,7 @@ func (p *Parser) handleMinf(te *TrackEntry, minf *Element) error {
 	return err
 }
 
-// Handles a Media Box element
+// handleMdia handles a Media Box element.
 func (p *Parser) handleMdia(te *TrackEntry, mdia *Element) error {
 	var el *Element
 	var err error
@@ -142,6 +149,7 @@ func (p *Parser) handleMdia(te *TrackEntry, mdia *Element) error {
 	return err
 }
 
+// handleTrak handles a Track Box element.
 func (p *Parser) handleTrak(te *TrackEntry, trak *Element) error {
 	var el *Element
 	var err error
@@ -170,6 +178,7 @@ func (p *Parser) handleTrak(te *TrackEntry, trak *Element) error {
 	return err
 }
 
+// handleMoov handles a Movie Box element.
 func (p *Parser) handleMoov(track *Track, moov *Element) error {
 	var el *Element
 	var err error
@@ -194,7 +203,8 @@ func (p *Parser) handleMoov(track *Track, moov *Element) error {
 	return err
 }
 
-// Returns a playable, will also implement playseekable if possible
+// Parse parses the headers and returns a playable.
+// The playable will also implement PlaySeekable if seeking is possible.
 func (p *Parser) Parse() (core.Playable, error) {
 	ftyp, err := p.Next()
 	if err != nil {

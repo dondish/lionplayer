@@ -28,36 +28,49 @@ import (
 	"github.com/dondish/lionplayer/core"
 )
 
+// Track is a Playable that is MP4 encoded (and PlaySeekable if possible).
 type Track struct {
 	Tracks   []TrackEntry
 	Root     *Element
 	Metadata map[string]interface{}
 }
 
+// SampleRate returns the samplerate of the Track.
 func (t Track) SampleRate() int {
 	panic("implement me")
 }
 
+// Channels returns the amount of channels of the track.
+//
+// The result can be 1 (mono) or 2 (stereo).
 func (t Track) Channels() int {
 	panic("implement me")
 }
 
+// Codec returns the codec each Packet returned by the Track is encoded in.
 func (t Track) Codec() string {
 	panic("implement me")
 }
 
+// Close stops the Track and frees up resources.
 func (t Track) Close() error {
 	panic("implement me")
 }
 
+// Chan returns the channel the Track outputs the Packets into.
 func (t Track) Chan() <-chan core.Packet {
 	panic("implement me")
 }
 
+// Play starts parsing the Track populating the channel returned by Chan, closing it on finishing.
+//
+// Be warned that Play does block the current goroutine, this function should
+// be started in a new goroutine.
 func (t Track) Play() {
 	panic("implement me")
 }
 
+// Pause pauses or unpauses the track according to the boolean given.
 func (t Track) Pause(bool) {
 	panic("implement me")
 }

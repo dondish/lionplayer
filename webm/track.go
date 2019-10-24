@@ -43,14 +43,16 @@ const (
 	unpause  = 4 * badTC                        // Unpause signal
 )
 
-// Basic container of information containing a single Block and information specific to that Block.
-// https://matroska.org/technical/specs/index.html#BlockGroup
+// BlockGroup is the basic container of information containing a single Block and information specific to that Block.
+//
+// See: https://matroska.org/technical/specs/index.html#BlockGroup
 type BlockGroup struct {
 	Block []byte `ebml:"A1"` // Block containing the actual data to be rendered and a timestamp relative to the Cluster Timestamp.
 }
 
-// The Top-Level Element containing the (monolithic) Block structure.
-// https://matroska.org/technical/specs/index.html#Cluster
+// Cluster is the Top-Level Element containing the (monolithic) Block structure.
+//
+// See: https://matroska.org/technical/specs/index.html#Cluster
 type Cluster struct {
 	SimpleBlock []byte `ebml:"A3" ebmlstop:"1"` // Similar to Block but without all the extra information,
 	// mostly used to reduced overhead when no extra feature is needed.
@@ -60,36 +62,8 @@ type Cluster struct {
 	BlockGroup BlockGroup `ebml:"A0" ebmlstop:"1"`
 }
 
-// The track is returned by the Parser
-// The track implements the core.Playable and core.PlaySeekable interface,
-// Although seeking in a live-stream will return an error.
-type Track struct {
-	Output     chan core.Packet   // Output channel of Packet instances
-	seek       chan time.Duration // signal channel
-	parser     *Parser            // The parser responsible for this Track
-	segment    *ebml.Element      // The segment
-	cues       int64              // the position of the cues element
-	cuepoints  []CuePoint         // saved cuepoints
-	tracks     []TrackEntry       // all of the tracks' ids
-	trackId    uint64             // the current track id
-	samplerate int                // the sample rate
-	channels   int                // the channel count
-	codec      string             // the codec the playable returns
-}
-
-func (t Track) SampleRate() int {
-	return t.samplerate
-}
-
-func (t Track) Channels() int {
-	return t.channels
-}
-
-func (t Track) Codec() string {
-	return t.codec
-}
-
-// Contain positions for different tracks corresponding to the timestamp.
+// TrackPosition contains positions for different tracks corresponding to the timestamp.
+//
 // https://matroska.org/technical/specs/index.html#TrackPosition
 type TrackPosition struct {
 	Track            uint64 `ebml:"F7"`
@@ -97,9 +71,54 @@ type TrackPosition struct {
 	RelativePosition uint64 `ebml:"F0"`
 }
 
-// Sets the pause to the boolean given
-// For example: if set to true, the player will pause
-// While pausing, until resumed you can't seek.
+// Track parses the track and fills up the channel with Packet-s.
+//
+// Track implements PlaySeekable.
+//
+// Seeking in a live-stream will return an error.
+type Track struct {
+	// The output channel of Packet instances
+	Output chan core.Packet
+	// The signal channel
+	seek chan time.Duration
+	// The parser responsible for this Track
+	parser *Parser
+	// The segment element
+	segment *ebml.Element
+	// The position of the cues element
+	cues int64
+	// A slice of saved cuepoints
+	cuepoints []CuePoint
+	// All of the tracks' ids
+	tracks []TrackEntry
+	// The current track id
+	trackId uint64
+	// The sample rate
+	samplerate int
+	// The channel count
+	channels int
+	// The codec the packets are encoded in.
+	codec string
+}
+
+// SampleRate returns the samplerate of the Track.
+func (t Track) SampleRate() int {
+	return t.samplerate
+}
+
+// Channels returns the amount of channels of the track.
+//
+// The result can be 1 (mono) or 2 (stereo).
+func (t Track) Channels() int {
+	return t.channels
+}
+
+// Codec returns the codec each Packet returned by the Track is encoded in.
+func (t Track) Codec() string {
+	return t.codec
+}
+
+// Pause pauses or unpauses the track according to the boolean given.
 func (t Track) Pause(b bool) {
 	if b {
 		t.seek <- pause // send the pause signal
@@ -108,8 +127,7 @@ func (t Track) Pause(b bool) {
 	}
 }
 
-// Stops the given track
-// Resources should be picked up by the GC and cleaned
+// Close stops the Track and frees up resources.
 func (t Track) Close() error {
 	t.segment = nil
 	t.parser = nil
@@ -117,11 +135,12 @@ func (t Track) Close() error {
 	return nil
 }
 
-// Returns the output channel
+// Chan returns the channel the Track outputs the Packets into.
 func (t Track) Chan() <-chan core.Packet {
 	return t.Output
 }
 
+// readUint64 extracts an unsigned long from the data of the element given.
 func readUint64(e *ebml.Element) (uint64, error) {
 	d, err := e.ReadData()
 	var i int
@@ -134,7 +153,7 @@ func readUint64(e *ebml.Element) (uint64, error) {
 	return val, err
 }
 
-// get the cluster positions from the cuepoint postions element
+// getClusterPositions returns the cluster positions of different tracks from the cuepoint postions element
 func getClusterPositions(positions *ebml.Element, tracklen int) (poses []uint64, err error) {
 	poses = make([]uint64, tracklen+1)
 	var pos *ebml.Element
@@ -158,7 +177,7 @@ func getClusterPositions(positions *ebml.Element, tracklen int) (poses []uint64,
 	return
 }
 
-// get the cuepoints from the cues element
+// parseCues parses the Cues element and returns a slice of cuepoints found in it.
 func parseCues(cues *ebml.Element, tracklen int) ([]CuePoint, error) {
 	if cues.Id != 0x1C53BB6B {
 		log.Println("wrong cues id", fmt.Sprintf("%#x", cues.Id))
@@ -189,7 +208,7 @@ func parseCues(cues *ebml.Element, tracklen int) ([]CuePoint, error) {
 	return cuepoints, nil
 }
 
-// Seeks to the cluster just before the timecode given
+// internalSeek seeks to the last cluster before the timecode given.
 func (t Track) internalSeek(duration time.Duration) error {
 	if t.cues == 0 {
 		return errors.New("seeks are not supported in streams")
@@ -217,7 +236,7 @@ func (t Track) internalSeek(duration time.Duration) error {
 	return err
 }
 
-// Sends a seek signal to the player, it will seek to that position after finishing up with the current cluster.
+// Seek sends a seek signal to the player, it will seek to that position after finishing up with the current cluster.
 func (t Track) Seek(duration time.Duration) error {
 	t.seek <- duration
 	return nil
@@ -309,6 +328,7 @@ func parseEBMLSizes(d []byte) (sz []int, curr int) {
 	return
 }
 
+// handleBlock handles the Block element.
 func (t *Track) handleBlock(block []byte, currtime time.Duration) {
 	pos := currtime + time.Duration(uint(block[1])<<8+uint(block[2]))*time.Millisecond
 	lacing := (block[3] >> 1) & 3
@@ -331,6 +351,7 @@ func (t *Track) handleBlock(block []byte, currtime time.Duration) {
 	}
 }
 
+// handleCluster handles the Cluster element.
 func (t *Track) handleCluster(cluster *ebml.Element, currtime time.Duration) {
 	var err error
 	for err == nil && len(t.seek) == 0 {
@@ -355,8 +376,10 @@ func (t *Track) handleCluster(cluster *ebml.Element, currtime time.Duration) {
 	}
 }
 
-// Starts parsing the content of the track and populating the output channel.
-// The output channel will be automatically closed after this.
+// Play starts parsing the Track populating the channel returned by Chan, closing it on finishing.
+//
+// Be warned that Play does block the current goroutine, this function should
+// be started in a new goroutine.
 func (t Track) Play() {
 	var err error
 	defer close(t.Output)

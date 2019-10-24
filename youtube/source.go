@@ -22,8 +22,9 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-// package youtube abstracts searching and playing audio through youtube.
-// currently only the audio/webm container with the opus codec is supported
+// Package youtube abstracts searching and playing audio through youtube.
+//
+// Currently only the audio/webm container and the opus codec are supported.
 package youtube
 
 import (
@@ -37,12 +38,12 @@ import (
 	"time"
 )
 
+// Source is an HTTP
 type Source struct {
 	Client *http.Client
 }
 
-// Create a new Source
-// Passing a client is optional
+// New creates a new Source using the Client given, if nil, it will use the default one.
 func New(client *http.Client) *Source {
 	if client == nil {
 		return &Source{Client: core.DefaultHTTPClient}
@@ -50,7 +51,7 @@ func New(client *http.Client) *Source {
 	return &Source{Client: client}
 }
 
-// Play a video by a video id
+// PlayVideo plays a video using the video id given.
 // Returns a youtube track that implements core.Track
 func (yt Source) PlayVideo(videoId string) (*Track, error) {
 	req, err := http.NewRequest("GET", "https://www.youtube.com/watch?v="+videoId+"&pbj=1&hl=en", nil)
@@ -123,9 +124,10 @@ var (
 	WatchUrl, _ = regexp.Compile("(?:https?://)?(?:www\\.)?(?:youtu\\.be/|youtube\\.com(?:/embed/|/v/|/watch.+v=))([\\w-_]{10,12})(?: [^\"& ]+)?")
 )
 
-// Play a video by a video url
-// Internally it extracts the videoID and calls PlayVideo
+// PlayVideoUrl plays a video using the video url given.
 // Returns a youtube track that implements core.Track
+//
+// Internally it extracts the videoID and calls PlayVideo
 func (yt Source) PlayVideoUrl(videoUrl string) (*Track, error) {
 	matches := WatchUrl.FindStringSubmatch(videoUrl)
 	if len(matches) >= 2 {

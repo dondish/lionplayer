@@ -37,46 +37,55 @@ import (
 )
 
 /*
-Improved version of https://github.com/ebml-go/webm that parses seeks on the Go. has way lower loading times.
+An improved version of https://github.com/ebml-go/webm that parses seeks on the Go. has way lower loading times.
 */
 
-// A Top-Level Element of information with many tracks described.
-// https://matroska.org/technical/specs/index.html#Tracks
+// Tracks is a Top-Level Element of information with many tracks described.
+//
+// See: https://matroska.org/technical/specs/index.html#Tracks
 type Tracks struct {
 	TrackEntry []TrackEntry `ebml:"AE"`
 }
 
-// Describes a track with all Elements.
-// https://matroska.org/technical/specs/index.html#TrackEntry
+// TrackEntry describes a track with all Elements.
+//
+// See: https://matroska.org/technical/specs/index.html#TrackEntry
 type TrackEntry struct {
 	TrackNumber uint64 `ebml:"D7"`
 	CodecID     string `ebml:"86"`
 	Audio       `ebml:"E1"`
 }
 
+// Audio stores audio settings.
+//
+// See: https://matroska.org/technical/specs/index.html#Audio
 type Audio struct {
 	SamplingFrequency float64 `ebml:"B5"`
 	Channels          uint    `ebml:"9F"`
 }
 
-// Contains a single seek entry to an EBML Element.
-// https://matroska.org/technical/specs/index.html#Seek
+// Seek contains a single seek entry to an EBML Element.
+//
+// See: https://matroska.org/technical/specs/index.html#Seek
 type Seek struct {
 	SeekId       []byte `ebml:"53AB"`
 	SeekPosition uint64 `ebml:"53AC"`
 }
 
-// The Parser abstracts the parsing of ebml
+// Parser abstracts the parsing of ebml files (and streams).
 type Parser struct {
 	*ebml.Element
 }
 
+// CuePoint contains all information relative to a seek point in the Segment.
+//
+// See: https://matroska.org/technical/specs/index.html#CuePoint
 type CuePoint struct {
 	timecode  uint64
 	positions []uint64
 }
 
-// Returns a new parser instance for this input stream
+// New creates a new parser instance for the input stream given.
 func New(rs io.ReadSeeker) (*Parser, error) {
 	var e *ebml.Element
 	e, err := ebml.RootElement(rs)
@@ -86,7 +95,7 @@ func New(rs io.ReadSeeker) (*Parser, error) {
 	return &Parser{e}, nil
 }
 
-// Parses the SeekHead and returns the position of the Cues element in the segment
+// parseMetaSeek parses the SeekHead and returns the position of the Cues element in the segment.
 func parseMetaSeek(seekhead *ebml.Element) (uint64, error) {
 	for seek, err := seekhead.Next(); err == nil; seek, err = seekhead.Next() {
 		var rseek Seek
@@ -101,7 +110,7 @@ func parseMetaSeek(seekhead *ebml.Element) (uint64, error) {
 	return 0, errors.New("cues not found")
 }
 
-// Parses a Tracks element and returns the track-ids found in each TrackEntry
+// parseTracks parses a Tracks element and returns all TrackEntry-s found.
 func parseTracks(tracks *ebml.Element) ([]TrackEntry, error) {
 	tracknumbers := make([]TrackEntry, 0)
 	var te TrackEntry
@@ -117,7 +126,9 @@ func parseTracks(tracks *ebml.Element) ([]TrackEntry, error) {
 	return tracknumbers, nil
 }
 
-// Parses a webm file and returns a playable, seek is only supported on non livestream songs.
+// Parse parses the webm file and returns a PlaySeekable.
+//
+// Seek is only supported on non-livestream tracks.
 func (p *Parser) Parse() (core.PlaySeekable, error) {
 	ebmlh, err := p.Next()
 	if err != nil {
