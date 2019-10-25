@@ -133,7 +133,7 @@ func (p *Parser) validateHeader() error {
 		return err
 	}
 	if ebmlh.Id != 0x1A45DFA3 {
-		return errors.New(fmt.Sprintf("no ebml header provided: %#x", ebmlh.Id))
+		return fmt.Errorf("no ebml header provided: %#x", ebmlh.Id)
 	}
 	_, err = p.Seek(ebmlh.Size(), 1)
 	return err
@@ -146,7 +146,7 @@ func (p *Parser) validateSegment() (*ebml.Element, error) {
 		return nil, err
 	}
 	if segment.Id != 0x18538067 {
-		return nil, errors.New(fmt.Sprintf("got something that is not segment: %#x", segment.Id))
+		return nil, fmt.Errorf("got something that is not segment: %#x", segment.Id)
 	}
 	return segment, nil
 }

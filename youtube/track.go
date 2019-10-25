@@ -90,7 +90,6 @@ func (t Track) PlaySeekable() (core.PlaySeekable, error) {
 			return nil, err
 		}
 		return file, nil
-	} else {
-		return nil, errors.New("mime type not supported")
 	}
+	return nil, errors.New("mime type not supported")
 }

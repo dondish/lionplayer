@@ -229,7 +229,7 @@ func (t Track) internalSeek(duration time.Duration) error {
 			return err
 		}
 	}
-	var lastpos uint64 = 0
+	var lastpos uint64
 	for _, cuepoint := range t.cuepoints {
 		if time.Duration(cuepoint.timecode)*time.Millisecond > duration {
 			_, err := t.segment.Seek(t.segment.Offset+12+int64(lastpos), 0)

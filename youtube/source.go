@@ -138,13 +138,12 @@ func (yt Source) PlayVideo(videoId string) (*Track, error) {
 			Format:   format,
 			source:   &yt,
 		}, nil
-	} else {
-		return nil, ErrTrackNotFound{}
 	}
+	return nil, ErrTrackNotFound{}
 }
 
 var (
-	WatchUrl, _ = regexp.Compile("(?:https?://)?(?:www\\.)?(?:youtu\\.be/|youtube\\.com(?:/embed/|/v/|/watch.+v=))([\\w-_]{10,12})(?: [^\"& ]+)?")
+	watchUrl, _ = regexp.Compile("(?:https?://)?(?:www\\.)?(?:youtu\\.be/|youtube\\.com(?:/embed/|/v/|/watch.+v=))([\\w-_]{10,12})(?: [^\"& ]+)?")
 )
 
 // PlayVideoUrl plays a video using the video url given.
@@ -152,16 +151,16 @@ var (
 //
 // Internally it extracts the videoID and calls PlayVideo.
 func (yt Source) PlayVideoUrl(videoUrl string) (*Track, error) {
-	matches := WatchUrl.FindStringSubmatch(videoUrl)
+	matches := watchUrl.FindStringSubmatch(videoUrl)
 	if len(matches) >= 2 {
 		return yt.PlayVideo(matches[1])
 	}
 	return nil, errors.New("unable to extract the video id")
 }
 
-// ExtractVideoID extracts the video id out of the given URL.
+// ExtractVideoId extracts the video id out of the given URL.
 func (yt Source) ExtractVideoId(videoUrl string) (string, error) {
-	matches := WatchUrl.FindStringSubmatch(videoUrl)
+	matches := watchUrl.FindStringSubmatch(videoUrl)
 	if len(matches) >= 2 {
 		return matches[1], nil
 	}
@@ -170,5 +169,5 @@ func (yt Source) ExtractVideoId(videoUrl string) (string, error) {
 
 // CheckVideoUrl returns whether the given video URL is a valid video URL.
 func (yt Source) CheckVideoUrl(videoUrl string) bool {
-	return WatchUrl.MatchString(videoUrl)
+	return watchUrl.MatchString(videoUrl)
 }

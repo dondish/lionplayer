@@ -229,7 +229,7 @@ func (p *Parser) handleTrak(te *TrackEntry, trak *Element) error {
 		}
 		err = el.Skip()
 	}
-	return err
+	return nil
 }
 
 // handleMoov handles a Movie Box element.
@@ -254,7 +254,7 @@ func (p *Parser) handleMoov(track *Track, moov *Element) error {
 		}
 		err = el.Skip()
 	}
-	return err
+	return nil
 }
 
 // Parse parses the headers and returns a playable.
@@ -276,6 +276,9 @@ func (p *Parser) Parse() (core.Playable, error) {
 		case "mdat", "free":
 			if p.moovReached {
 				_, err = p.R.Seek(el.Offset, 0)
+				if err != nil {
+					return nil, err
+				}
 				goto Finish
 			}
 		case "moov":
@@ -290,7 +293,6 @@ func (p *Parser) Parse() (core.Playable, error) {
 Finish:
 	if p.isFragmented {
 		return p.ft, nil
-	} else {
-		return p.st, nil
 	}
+	return p.st, nil
 }
