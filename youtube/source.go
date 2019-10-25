@@ -43,6 +43,22 @@ type Source struct {
 	Client *http.Client
 }
 
+// ErrUnplayable is the error returned by fails in PlayVideo.
+type ErrUnplayble struct {
+	Reason string
+}
+
+func (e ErrUnplayble) Error() string {
+	return "unplayable: " + e.Reason
+}
+
+// ErrTrackNotFound is the error returned when a track is not found
+type ErrTrackNotFound struct{}
+
+func (e ErrTrackNotFound) Error() string {
+	return "track not found"
+}
+
 // New creates a new Source using the Client given, if nil, it will use the default one.
 func New(client *http.Client) *Source {
 	if client == nil {
@@ -79,7 +95,7 @@ func (yt Source) PlayVideo(videoId string) (*Track, error) {
 		}
 	}
 	if pi == nil {
-		return nil, errors.New("pi is nil")
+		return nil, ErrTrackNotFound{}
 	}
 	args := pi["args"].(map[string]interface{})
 	playerResponse, ok := args["player_response"]
@@ -90,6 +106,13 @@ func (yt Source) PlayVideo(videoId string) (*Track, error) {
 		if err != nil {
 			return nil, err
 		}
+		playStatus := pres["playabilityStatus"].(map[string]interface{})
+		status := playStatus["status"].(string)
+
+		if status == "ERROR" {
+			return nil, ErrUnplayble{playStatus["reason"].(string)}
+		}
+
 		vDetails := pres["videoDetails"].(map[string]interface{})
 		isStream := vDetails["isLiveContent"].(bool)
 		var duration time.Duration
@@ -116,7 +139,7 @@ func (yt Source) PlayVideo(videoId string) (*Track, error) {
 			source:   &yt,
 		}, nil
 	} else {
-		return nil, errors.New("couldn't find the track")
+		return nil, ErrTrackNotFound{}
 	}
 }
 
