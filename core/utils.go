@@ -25,10 +25,7 @@ SOFTWARE.
 package core
 
 import (
-	"bufio"
-	"io"
 	"net/http"
-	"sync"
 	"time"
 )
 
@@ -39,39 +36,39 @@ var DefaultHTTPClient = &http.Client{
 	Timeout: 10 * time.Second,
 }
 
-// noopReader implements io.Reader that does nothing on Read.
+//// noopReader implements io.Reader that does nothing on Read.
+////
+//// Should not be called and it is used for pooled buffers.
+//type noopReader struct {
+//}
 //
-// Should not be called and it is used for pooled buffers.
-type noopReader struct {
-}
-
-// noopSingleton is the only instance of noopReader.
-var noopSingleton = &noopReader{}
-
-func (n2 noopReader) Read(p []byte) (n int, err error) {
-	return 0, nil
-}
-
-// bufReaderPool is a pool of unused buffered readers.
-var bufReaderPool = &sync.Pool{
-	New: func() interface{} {
-		return bufio.NewReader(noopSingleton)
-	},
-}
-
-// AcquireBufferedReader acquires a new bufio.Reader from the pool.
+//// noopSingleton is the only instance of noopReader.
+//var noopSingleton = &noopReader{}
 //
-// Provides buffer-reuse that minimizes GC pressure and maintains a low memory overhead.
-func AcquireBufferedReader(reader io.Reader) *bufio.Reader {
-	buf := bufReaderPool.Get().(*bufio.Reader)
-	buf.Reset(reader)
-	return buf
-}
-
-// ReleaseBufferedReader returns a bufio.Reader to the pool.
+//func (n2 noopReader) Read(p []byte) (n int, err error) {
+//	return 0, nil
+//}
 //
-// Provides buffer-reuse that minimizes GC pressure and maintains a low memory overhead.
-func ReleaseBufferedReader(buf *bufio.Reader) {
-	buf.Reset(noopSingleton)
-	bufReaderPool.Put(buf)
-}
+//// bufReaderPool is a pool of unused buffered readers.
+//var bufReaderPool = &sync.Pool{
+//	New: func() interface{} {
+//		return bufio.NewReader(noopSingleton)
+//	},
+//}
+//
+//// AcquireBufferedReader acquires a new bufio.Reader from the pool.
+////
+//// Provides buffer-reuse that minimizes GC pressure and maintains a low memory overhead.
+//func AcquireBufferedReader(reader io.Reader) *bufio.Reader {
+//	buf := bufReaderPool.Get().(*bufio.Reader)
+//	buf.Reset(reader)
+//	return buf
+//}
+//
+//// ReleaseBufferedReader returns a bufio.Reader to the pool.
+////
+//// Provides buffer-reuse that minimizes GC pressure and maintains a low memory overhead.
+//func ReleaseBufferedReader(buf *bufio.Reader) {
+//	buf.Reset(noopSingleton)
+//	bufReaderPool.Put(buf)
+//}

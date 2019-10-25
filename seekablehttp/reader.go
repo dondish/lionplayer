@@ -67,7 +67,6 @@ func (s *SeekingHTTP) Close() error {
 // close provides internal connection closing used for seeks above the current buffer limit
 func (s *SeekingHTTP) close() error {
 	if s.open {
-		core.ReleaseBufferedReader(s.respbuf)
 		s.open = false
 		return s.resp.Close()
 	}
@@ -136,7 +135,11 @@ func (s *SeekingHTTP) ReadAt(buf []byte, off int64) (int, error) {
 		if resp.StatusCode == http.StatusOK || resp.StatusCode == http.StatusPartialContent {
 			s.resp = resp.Body
 			s.open = true
-			s.respbuf = core.AcquireBufferedReader(s.resp)
+			if s.respbuf == nil {
+				s.respbuf = bufio.NewReader(s.resp)
+			} else {
+				s.respbuf.Reset(s.resp)
+			}
 		}
 	}
 	return s.respbuf.Read(buf)
