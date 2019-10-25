@@ -32,7 +32,7 @@ import (
 var (
 	rickvid = "dQw4w9WgXcQ"
 	rick1   = "https://youtu.be/dQw4w9WgXcQ"
-	rick2   = "https://youtube.com/dQw4w9gXcQ"
+	rick2   = "https://youtube.com/watch?v=dQw4w9gXcQ"
 	rick3   = "https://youtube.c/dQw4w9gXcQ"
 )
 
