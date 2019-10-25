@@ -42,7 +42,7 @@ func TestSource_PlayVideo(t *testing.T) {
 	track, err := ytsrc.PlayVideo(rickvid)
 	assert.Nil(t, err, "error is supposed to be nil")
 	assert.Equal(t, "Rick Astley - Never Gonna Give You Up (Video)", track.Title, "the track's name should be equal")
-	assert.Equal(t, "Official Rick Astley", track.Author, "the track's author should be equal")
+	assert.Equal(t, "RickAstleyVEVO", track.Author, "the track's author should be equal")
 	assert.False(t, track.IsStream, "this is not a live-stream")
 }
 
@@ -50,12 +50,12 @@ func TestSource_PlayVideoUrl(t *testing.T) {
 	track, err := ytsrc.PlayVideoUrl(rick1)
 	assert.Nil(t, err, "error is supposed to be nil")
 	assert.Equal(t, "Rick Astley - Never Gonna Give You Up (Video)", track.Title, "the track's name should be equal")
-	assert.Equal(t, "Official Rick Astley", track.Author, "the track's author should be equal")
+	assert.Equal(t, "RickAstleyVEVO", track.Author, "the track's author should be equal")
 	assert.False(t, track.IsStream, "this is not a live-stream")
 	track, err = ytsrc.PlayVideoUrl(rick2)
 	assert.Nil(t, err, "error is supposed to be nil")
 	assert.Equal(t, "Rick Astley - Never Gonna Give You Up (Video)", track.Title, "the track's name should be equal")
-	assert.Equal(t, "Official Rick Astley", track.Author, "the track's author should be equal")
+	assert.Equal(t, "RickAstleyVEVO", track.Author, "the track's author should be equal")
 	assert.False(t, track.IsStream, "this is not a live-stream")
 	_, err = ytsrc.PlayVideoUrl(rick3)
 	assert.NotNil(t, err, "the error is supposed to not be nil")
