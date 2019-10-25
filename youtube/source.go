@@ -44,11 +44,11 @@ type Source struct {
 }
 
 // ErrUnplayable is the error returned by fails in PlayVideo.
-type ErrUnplayble struct {
+type ErrUnplayable struct {
 	Reason string
 }
 
-func (e ErrUnplayble) Error() string {
+func (e ErrUnplayable) Error() string {
 	return "unplayable: " + e.Reason
 }
 
@@ -110,7 +110,7 @@ func (yt Source) PlayVideo(videoId string) (*Track, error) {
 		status := playStatus["status"].(string)
 
 		if status == "ERROR" {
-			return nil, ErrUnplayble{playStatus["reason"].(string)}
+			return nil, ErrUnplayable{playStatus["reason"].(string)}
 		}
 
 		vDetails := pres["videoDetails"].(map[string]interface{})

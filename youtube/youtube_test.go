@@ -42,7 +42,7 @@ var ytsrc = New(nil)
 
 func TestSource_PlayVideo(t *testing.T) {
 	track, err := ytsrc.PlayVideo(rickvid)
-	_, ok := err.(ErrUnplayble)
+	_, ok := err.(ErrUnplayable)
 	if ok { // if the track is unplayable skip
 		t.Skip()
 	}
@@ -54,7 +54,7 @@ func TestSource_PlayVideo(t *testing.T) {
 
 func TestSource_PlayVideoUrl(t *testing.T) {
 	track, err := ytsrc.PlayVideoUrl(rick1)
-	_, ok := err.(ErrUnplayble)
+	_, ok := err.(ErrUnplayable)
 	if ok { // if the track is unplayable skip
 		t.Skip()
 	}
@@ -66,7 +66,7 @@ func TestSource_PlayVideoUrl(t *testing.T) {
 
 func TestSource_PlayVideoUrl2(t *testing.T) {
 	track, err := ytsrc.PlayVideoUrl(rick2)
-	_, ok := err.(ErrUnplayble)
+	_, ok := err.(ErrUnplayable)
 	if ok { // if the track is unplayable skip
 		t.Skip()
 	}
