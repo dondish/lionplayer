@@ -32,7 +32,7 @@ import (
 var (
 	rickvid   = "dQw4w9WgXcQ"
 	rick1     = "https://youtu.be/dQw4w9WgXcQ"
-	rick2     = "https://youtube.com/watch?v=dQw4w9gXcQ"
+	rick2     = "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
 	rick3     = "https://youtube.c/dQw4w9gXcQ"
 	ricktitle = "Rick Astley - Never Gonna Give You Up (Video)"
 	rickauth  = "RickAstleyVEVO"
