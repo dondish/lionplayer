@@ -259,6 +259,7 @@ func (p *Parser) handleMoov(track *Track, moov *Element) error {
 
 // Parse parses the headers and returns a playable.
 // The playable will also implement PlaySeekable if seeking is possible.
+// The playable can be either FragmentedTrack or StandardTrack
 func (p *Parser) Parse() (core.Playable, error) {
 	ftyp, err := p.Next()
 	if err != nil {
