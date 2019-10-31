@@ -118,7 +118,7 @@ func parseTracks(tracks *ebml.Element) ([]TrackEntry, error) {
 }
 
 // Parses a webm file and returns a playable, seek is only supported on non livestream songs.
-func (p *Parser) Parse() (core.PlaySeekable, error) {
+func (p *Parser) Parse() (*Track, error) {
 	ebmlh, err := p.Next()
 	if err != nil {
 		return nil, err
@@ -182,6 +182,6 @@ func (p *Parser) Parse() (core.PlaySeekable, error) {
 		_, err = segment.Seek(el.Size(), 1)
 	}
 Finish:
-	return t, nil
+	return &t, nil
 
 }

@@ -110,7 +110,7 @@ func (t Track) Pause(b bool) {
 
 // Stops the given track
 // Resources should be picked up by the GC and cleaned
-func (t Track) Close() error {
+func (t *Track) Close() error {
 	t.segment = nil
 	t.parser = nil
 	t.seek <- shutdown

@@ -194,7 +194,8 @@ func (p *Parser) handleMoov(track *Track, moov *Element) error {
 	return err
 }
 
-// Returns a playable, will also implement playseekable if possible
+// Returns a playable, will also implement PlaySeekable if possible.
+// The playable can be either FragmentedTrack or StandardTrack
 func (p *Parser) Parse() (core.Playable, error) {
 	ftyp, err := p.Next()
 	if err != nil {
