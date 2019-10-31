@@ -22,8 +22,9 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-// package youtube abstracts searching and playing audio through youtube.
-// currently only the audio/webm container with the opus codec is supported
+// Package youtube abstracts searching and playing audio through youtube.
+//
+// Currently only the audio/webm container and the opus codec are supported.
 package youtube
 
 import (
@@ -37,12 +38,28 @@ import (
 	"time"
 )
 
+// Source is an HTTP
 type Source struct {
 	Client *http.Client
 }
 
-// Create a new Source
-// Passing a client is optional
+// ErrUnplayable is the error returned by fails in PlayVideo.
+type ErrUnplayable struct {
+	Reason string
+}
+
+func (e ErrUnplayable) Error() string {
+	return "unplayable: " + e.Reason
+}
+
+// ErrTrackNotFound is the error returned when a track is not found
+type ErrTrackNotFound struct{}
+
+func (e ErrTrackNotFound) Error() string {
+	return "track not found"
+}
+
+// New creates a new Source using the Client given, if nil, it will use the default one.
 func New(client *http.Client) *Source {
 	if client == nil {
 		return &Source{Client: core.DefaultHTTPClient}
@@ -50,7 +67,7 @@ func New(client *http.Client) *Source {
 	return &Source{Client: client}
 }
 
-// Play a video by a video id
+// PlayVideo plays a video using the video id given.
 // Returns a youtube track that implements core.Track
 func (yt Source) PlayVideo(videoId string) (*Track, error) {
 	req, err := http.NewRequest("GET", "https://www.youtube.com/watch?v="+videoId+"&pbj=1&hl=en", nil)
@@ -78,7 +95,7 @@ func (yt Source) PlayVideo(videoId string) (*Track, error) {
 		}
 	}
 	if pi == nil {
-		return nil, errors.New("pi is nil")
+		return nil, ErrTrackNotFound{}
 	}
 	args := pi["args"].(map[string]interface{})
 	playerResponse, ok := args["player_response"]
@@ -89,6 +106,13 @@ func (yt Source) PlayVideo(videoId string) (*Track, error) {
 		if err != nil {
 			return nil, err
 		}
+		playStatus := pres["playabilityStatus"].(map[string]interface{})
+		status := playStatus["status"].(string)
+
+		if status == "ERROR" {
+			return nil, ErrUnplayable{playStatus["reason"].(string)}
+		}
+
 		vDetails := pres["videoDetails"].(map[string]interface{})
 		isStream := vDetails["isLiveContent"].(bool)
 		var duration time.Duration
@@ -114,36 +138,36 @@ func (yt Source) PlayVideo(videoId string) (*Track, error) {
 			Format:   format,
 			source:   &yt,
 		}, nil
-	} else {
-		return nil, errors.New("couldn't find the track")
 	}
+	return nil, ErrTrackNotFound{}
 }
 
 var (
-	WatchUrl, _ = regexp.Compile("(?:https?://)?(?:www\\.)?(?:youtu\\.be/|youtube\\.com(?:/embed/|/v/|/watch.+v=))([\\w-_]{10,12})(?: [^\"& ]+)?")
+	watchUrl, _ = regexp.Compile("(?:https?://)?(?:www\\.)?(?:youtu\\.be/|youtube\\.com(?:/embed/|/v/|/watch.+v=))([\\w-_]{10,12})(?: [^\"& ]+)?")
 )
 
-// Play a video by a video url
-// Internally it extracts the videoID and calls PlayVideo
-// Returns a youtube track that implements core.Track
+// PlayVideoUrl plays a video using the video url given.
+// Returns a youtube track that implements core.Track.
+//
+// Internally it extracts the videoID and calls PlayVideo.
 func (yt Source) PlayVideoUrl(videoUrl string) (*Track, error) {
-	matches := WatchUrl.FindStringSubmatch(videoUrl)
+	matches := watchUrl.FindStringSubmatch(videoUrl)
 	if len(matches) >= 2 {
 		return yt.PlayVideo(matches[1])
 	}
 	return nil, errors.New("unable to extract the video id")
 }
 
-// Extracts the VideoId out of the URL
+// ExtractVideoId extracts the video id out of the given URL.
 func (yt Source) ExtractVideoId(videoUrl string) (string, error) {
-	matches := WatchUrl.FindStringSubmatch(videoUrl)
+	matches := watchUrl.FindStringSubmatch(videoUrl)
 	if len(matches) >= 2 {
 		return matches[1], nil
 	}
 	return "", errors.New("unable to extract the video id")
 }
 
-// Checks whether a video URL is valid
+// CheckVideoUrl returns whether the given video URL is a valid video URL.
 func (yt Source) CheckVideoUrl(videoUrl string) bool {
-	return WatchUrl.MatchString(videoUrl)
+	return watchUrl.MatchString(videoUrl)
 }

@@ -41,7 +41,7 @@ import (
 )
 
 var (
-	SeekPattern, _ = regexp.Compile("(?:([0-9]{1,2})h)?(?:([0-9]{1,2})m)?(?:([0-9]{1,2})s)?") // A pattern to seek
+	seekPattern, _ = regexp.Compile("(?:([0-9]{1,2})h)?(?:([0-9]{1,2})m)?(?:([0-9]{1,2})s)?") // A pattern to seek
 )
 
 func init() {
@@ -84,7 +84,7 @@ func main() {
 	}
 
 	// Wait here until CTRL-C or other term signal is received.
-	fmt.Println("Airhorn is now running.  Press CTRL-C to exit.")
+	fmt.Println("Lionplayer is now running.  Press CTRL-C to exit.")
 	sc := make(chan os.Signal, 1)
 	signal.Notify(sc, syscall.SIGINT, syscall.SIGTERM, os.Interrupt, os.Kill)
 	<-sc
@@ -130,7 +130,7 @@ func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 			return
 		}
 
-		videoId, err := ytsrc.ExtractVideoId(strings.TrimSpace(splut[1]))
+		videoID, err := ytsrc.ExtractVideoId(strings.TrimSpace(splut[1]))
 
 		if err != nil {
 			return
@@ -146,7 +146,7 @@ func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 		// Look for the message sender in that guild's current voice states.
 		for _, vs := range g.VoiceStates {
 			if vs.UserID == m.Author.ID {
-				err = playSound(s, g.ID, vs.ChannelID, videoId, c.ID)
+				err = playSound(s, g.ID, vs.ChannelID, videoID, c.ID)
 				if err != nil {
 					fmt.Println("Error playing sound:", err)
 				}
@@ -177,14 +177,14 @@ func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 
 		splut := strings.Split(m.Content, " ")
 
-		if len(splut) == 1 || !SeekPattern.MatchString(strings.TrimSpace(splut[1])) {
+		if len(splut) == 1 || !seekPattern.MatchString(strings.TrimSpace(splut[1])) {
 			_, err := s.ChannelMessageSend(c.ID, "Please provide a correct seek")
 			if err != nil {
 				return
 			}
 			return
 		}
-		matches := SeekPattern.FindStringSubmatch(strings.TrimSpace(splut[1]))
+		matches := seekPattern.FindStringSubmatch(strings.TrimSpace(splut[1]))
 		var hour, minute, second int
 		if matches[1] != "" {
 			hour, _ = strconv.Atoi(matches[1])
@@ -200,10 +200,7 @@ func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 		if ok {
 			_ = trackseek.Seek(ms)
 		} else {
-			_, err := s.ChannelMessageSend(c.ID, "Track is not seekable")
-			if err != nil {
-				return
-			}
+			_, _ = s.ChannelMessageSend(c.ID, "Track is not seekable")
 			return
 		}
 	} else if strings.HasPrefix(m.Content, "!!pause") {
@@ -249,7 +246,7 @@ func guildCreate(s *discordgo.Session, event *discordgo.GuildCreate) {
 // loadSound attempts to load an encoded sound file from disk.
 
 // playSound plays the current buffer to the provided channel.
-func playSound(s *discordgo.Session, guildID, channelID, videoId, msgchannel string) (err error) {
+func playSound(s *discordgo.Session, guildID, channelID, videoID, msgchannel string) (err error) {
 
 	// Join the provided voice channel.
 	vc, err := s.ChannelVoiceJoin(guildID, channelID, false, true)
@@ -274,7 +271,7 @@ func playSound(s *discordgo.Session, guildID, channelID, videoId, msgchannel str
 		vc.Disconnect()
 	}()
 
-	trac, err := ytsrc.PlayVideo(videoId)
+	trac, err := ytsrc.PlayVideo(videoID)
 	if err != nil {
 		return err
 	}

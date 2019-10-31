@@ -22,7 +22,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-// Package core defines the basic implementation of common data structures used by and exported from lionplayer
+// Package core defines the basic implementation of common data structures used by and exported from lionplayer.
 package core
 
 import (
@@ -30,41 +30,48 @@ import (
 	"time"
 )
 
-// Decoded packet
+// Packet represents an audio frame (or multiple frames).
 type Packet struct {
+	// The timecode of this packet.
 	Timecode time.Duration
-	Data     []byte
+	// The data encoded in the codec of the playable sending this packet.
+	Data []byte
 }
 
-// The basic interface of a playable interface
-// Playable should not be copied and passed but instead should be used by the player itself
+// Playable is an interface for structs that will be passed to the player.
+//
+// Playable should not be copied orr passed around but instead should be used by the player itself.
 type Playable interface {
-	io.Closer            // Will be used to stop the track
-	Chan() <-chan Packet // Returns the output channel
-	Play()               // Start this function in a new coroutine, it feeds the channel data
-	Pause(bool)          // Whether to pause or unpause
-	SampleRate() int     // Returns the sampling frequency in Hz
-	Channels() int       // Returns the amount of channels
-	Codec() string       // Returns the codec (lowercase) (for example: opus)
+	io.Closer
+	Chan() <-chan Packet
+	Play()
+	Pause(bool)
+	SampleRate() int
+	Channels() int
+	Codec() string
 }
 
-// The interface of a playable that can be seek in
+// PlaySeekable is a Playable where it is possible to seek to a timecode.
 type PlaySeekable interface {
 	Playable
-	Seek(duration time.Duration) error // Seek to a point in the track
+	Seek(duration time.Duration) error
 }
 
-// An interface for a track
-// A track is not played directly and can be passed by multiple nodes
+// Track contains metadata that can be used to extract a Playable.
 type Track interface {
-	Playable() (Playable, error) // Get a playable matching this track. Can be called multiple times to extract a new Playable each time.
-	Bitrate() int                // Returns the bitrate the track will use
-	Codec() string               // Returns the codec the playable is encoded in
-	Duration() time.Duration     // Returns the duration of the track
+	// Playable returns a new Playable matching this track.
+	Playable() (Playable, error)
+	// Bitrate returns the bitrate.
+	Bitrate() int
+	// Codec returns the codec.
+	Codec() string
+	// Duration returns the duration of the track.
+	Duration() time.Duration
 }
 
-// An interface for a track that can be seeked
+// SeekableTrack contains metadata that can be used to extract a PlaySeekable.
 type SeekableTrack interface {
 	Track
+	// PlaySeekable returns a new PlaySeekable matching this track.
 	PlaySeekable() (PlaySeekable, error)
 }

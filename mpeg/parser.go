@@ -22,8 +22,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-// Package mpeg simplifies the parsing of the MP4 and other related MPEG file formats
-// Reference: http://l.web.umkc.edu/lizhu/teaching/2016sp.video-communication/ref/mp4.pdf
+// Package mpeg simplifies the parsing of the MP4 and other related MPEG file formats.
 package mpeg
 
 import (
@@ -32,23 +31,33 @@ import (
 	"io"
 )
 
-//
+/*
+TrackEntry represents an MPEG track.
+
+There can be multiple in each track.
+*/
 type TrackEntry struct {
-	Id      uint32
-	Handler string
+	Id         uint32
+	Handler    string
+	Channels   uint16
+	SampleRate uint32
 }
 
-// Parser reads and decodes data from an inputstream to create a playable instance
+// Parser reads and decodes data from an input stream to create a playable instance.
 type Parser struct {
 	*Element
+	// Whether the track is fragmented.
 	isFragmented bool
-	ft           *FragmentedTrack
-	st           *StandardTrack
-	moovReached  bool // On fragmented MP4 free might be sooner than moov
+	// The MPEG track types.
+	ft *FragmentedTrack
+	st *StandardTrack
+	// On fragmented MP4 free might be sooner than moov.
+	moovReached bool
+	// The sample tables to provide seeking.
 	sampleTables []*Element
 }
 
-// Creates a new Parser
+// New creates a new Parser using the given ReadSeeker.
 func New(rs io.ReadSeeker, length int64) *Parser {
 	t := &Track{}
 	return &Parser{Element: &Element{
@@ -64,25 +73,71 @@ func New(rs io.ReadSeeker, length int64) *Parser {
 	}
 }
 
-// Handle a Sample Table Box element
+// handleSoun handles an AudioSampleEntry element.
+func (p *Parser) handleSoun(te *TrackEntry, soun *Element) error {
+	err := soun.ParseFlags()
+	if err != nil {
+		return err
+	}
+	_, err = soun.R.Seek(12, 1)
+	if err != nil {
+		return err
+	}
+	te.Channels, err = soun.readInt16()
+	if err != nil {
+		return err
+	}
+	_, err = soun.R.Seek(4, 1)
+	if err != nil {
+		return err
+	}
+	te.SampleRate, err = soun.readInt32()
+	return err
+}
+
+// handleStsd handles an Sample Description Box element.
+func (p *Parser) handleStsd(te *TrackEntry, stsd *Element) error {
+	err := stsd.ParseFlags()
+	if err != nil {
+		return err
+	}
+	entrycount, err := stsd.readInt32()
+	if err != nil {
+		return err
+	}
+	if entrycount > 0 {
+		codec, err := stsd.Next()
+		if err != nil {
+			return err
+		}
+		if te.Handler == "soun" {
+			err = p.handleSoun(te, codec)
+			if err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+// handleStbl handles a Sample Table Box element.
 func (p *Parser) handleStbl(te *TrackEntry, stbl *Element) error {
 	var el *Element
 	var err error
 	for el, err = stbl.Next(); err == nil; el, err = stbl.Next() {
 		switch el.Id {
 		case "stsd":
-			err = el.ParseFlags()
+			err = p.handleStsd(te, el)
 			if err != nil {
 				return err
 			}
-
 		}
 		err = el.Skip()
 	}
 	return err
 }
 
-// Handles a Media Information Box element
+// handleMinf handles a Media Information Box element.
 func (p *Parser) handleMinf(te *TrackEntry, minf *Element) error {
 	var el *Element
 	var err error
@@ -99,7 +154,29 @@ func (p *Parser) handleMinf(te *TrackEntry, minf *Element) error {
 	return err
 }
 
-// Handles a Media Box element
+// handleMdhd handles a Media Header Box element.
+func (p *Parser) handleMdhd(te *TrackEntry, mdhd *Element) error {
+	err := mdhd.ParseFlags()
+	if err != nil {
+		return err
+	}
+	if mdhd.Version == 1 {
+		_, err = mdhd.R.Seek(16, 1) // Seek over creation time and modification time
+	} else {
+		_, err = mdhd.R.Seek(8, 1) // Seek over creation time and modification time
+	}
+	if err != nil {
+		return err
+	}
+	timescale, err := mdhd.readInt32()
+	if err != nil {
+		return err
+	}
+	p.st.TimeScales[int(te.Id)] = int(timescale)
+	return nil
+}
+
+// handleMdia handles a Media Box element.
 func (p *Parser) handleMdia(te *TrackEntry, mdia *Element) error {
 	var el *Element
 	var err error
@@ -119,29 +196,14 @@ func (p *Parser) handleMdia(te *TrackEntry, mdia *Element) error {
 				return err
 			}
 		case "mdhd": // Media Header Box
-			err = el.ParseFlags()
-			if err != nil {
-				return err
-			}
-			if el.Version == 1 {
-				_, err = el.R.Seek(16, 1) // Seek over creation time and modification time
-			} else {
-				_, err = el.R.Seek(8, 1) // Seek over creation time and modification time
-			}
-			if err != nil {
-				return err
-			}
-			timescale, err := el.readInt32()
-			if err != nil {
-				return err
-			}
-			p.st.TimeScales[int(te.Id)] = int(timescale)
+			err = p.handleMdhd(te, el)
 		}
 		err = el.Skip()
 	}
 	return err
 }
 
+// handleTrak handles a Track Box element.
 func (p *Parser) handleTrak(te *TrackEntry, trak *Element) error {
 	var el *Element
 	var err error
@@ -167,9 +229,10 @@ func (p *Parser) handleTrak(te *TrackEntry, trak *Element) error {
 		}
 		err = el.Skip()
 	}
-	return err
+	return nil
 }
 
+// handleMoov handles a Movie Box element.
 func (p *Parser) handleMoov(track *Track, moov *Element) error {
 	var el *Element
 	var err error
@@ -191,11 +254,11 @@ func (p *Parser) handleMoov(track *Track, moov *Element) error {
 		}
 		err = el.Skip()
 	}
-	return err
+	return nil
 }
 
-// Returns a playable, will also implement PlaySeekable if possible.
-// The playable can be either FragmentedTrack or StandardTrack
+// Parse parses the headers and returns a playable.
+// The playable will also implement PlaySeekable if seeking is possible.
 func (p *Parser) Parse() (core.Playable, error) {
 	ftyp, err := p.Next()
 	if err != nil {
@@ -213,6 +276,9 @@ func (p *Parser) Parse() (core.Playable, error) {
 		case "mdat", "free":
 			if p.moovReached {
 				_, err = p.R.Seek(el.Offset, 0)
+				if err != nil {
+					return nil, err
+				}
 				goto Finish
 			}
 		case "moov":
@@ -227,7 +293,6 @@ func (p *Parser) Parse() (core.Playable, error) {
 Finish:
 	if p.isFragmented {
 		return p.ft, nil
-	} else {
-		return p.st, nil
 	}
+	return p.st, nil
 }

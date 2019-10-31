@@ -33,6 +33,11 @@ import (
 	"time"
 )
 
+// Track represents a Youtube track.
+// Track is lazy-loaded which means that it won't
+// load anything before being instructed to, which
+// means that to extract the valid url you will
+// need to call Track.GetPlaySeekable()
 type Track struct {
 	VideoId  string
 	Title    string
@@ -43,20 +48,22 @@ type Track struct {
 	Format   *Format
 }
 
+// Codec returns the codec the content is encoded in.
 func (t Track) Codec() string {
 	return strings.Trim(strings.Split(t.Format.Type, "=")[1], "\"")
 }
 
+// Duration returns the duration of the track.
 func (t Track) Duration() time.Duration {
 	return t.Length
 }
 
-// Return a playable of this track that can be played.
+// Playable returns a core.Playable matching this track.
 func (t Track) Playable() (core.Playable, error) {
 	return t.PlaySeekable()
 }
 
-// Return a playseekable of this track that can be played.
+// PlaySeekable returns a core.PlaySeekable matching this track.
 func (t Track) PlaySeekable() (core.PlaySeekable, error) {
 	vurl, err := t.Format.GetValidUrl()
 	if err != nil {
@@ -83,7 +90,6 @@ func (t Track) PlaySeekable() (core.PlaySeekable, error) {
 			return nil, err
 		}
 		return file, nil
-	} else {
-		return nil, errors.New("mime type not supported")
 	}
+	return nil, errors.New("mime type not supported")
 }

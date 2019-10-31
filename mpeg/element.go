@@ -33,6 +33,7 @@ var (
 	isodec = charmap.ISO8859_1.NewDecoder()
 )
 
+// Element defines an MPEG element.
 type Element struct {
 	R       io.ReadSeeker
 	N       int64
@@ -66,7 +67,7 @@ func parseInt(data []byte) uint64 {
 
 func (e *Element) readInt64() (uint64, error) {
 	n, err := io.ReadFull(e.R, e.intbuf)
-	if n == 1 && e.intbuf[0] == 0b1111 {
+	if n == 1 && e.intbuf[0] == 255 {
 		return 0, io.EOF
 	}
 	if err != nil {
@@ -76,13 +77,22 @@ func (e *Element) readInt64() (uint64, error) {
 }
 
 func (e *Element) readInt32() (uint32, error) {
+	_, err := io.ReadFull(e.R, e.intbuf[:4])
+	if err != nil {
+		return 0, err
+	}
+	return uint32(parseInt(e.intbuf[:4])), nil
+}
+
+func (e *Element) readInt16() (uint16, error) {
 	_, err := io.ReadFull(e.R, e.intbuf[:2])
 	if err != nil {
 		return 0, err
 	}
-	return uint32(parseInt(e.intbuf[:2])), nil
+	return uint16(parseInt(e.intbuf[:2])), nil
 }
 
+// Next returns the Element after this element.
 func (e *Element) Next() (*Element, error) {
 	offs, err := e.R.Seek(0, 1)
 	if err != nil {
@@ -102,11 +112,13 @@ func (e *Element) Next() (*Element, error) {
 	}, nil
 }
 
+// Skip advances the offset of the reader to after this segment.
 func (e *Element) Skip() error {
 	_, err := e.R.Seek(e.Offset+e.N, 0)
 	return err
 }
 
+// ParseFlags parses the flags in the first 4 bytes of the data.
 func (e *Element) ParseFlags() error {
 	in, err := e.readInt32()
 	if err != nil {
