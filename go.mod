@@ -1,7 +1,7 @@
 module github.com/dondish/lionplayer
 
 require (
-	github.com/bwmarrin/discordgo v0.20.1
+	github.com/bwmarrin/discordgo v0.21.1
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/ebml-go/ebml v0.0.0-20160925193348-ca8851a10894
 	github.com/gorilla/websocket v1.4.1 // indirect
