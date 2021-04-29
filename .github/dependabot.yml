@@ -1,0 +1,15 @@
+version: 2
+updates:
+- package-ecosystem: gomod
+  directory: "/"
+  schedule:
+    interval: daily
+    time: "03:00"
+  open-pull-requests-limit: 10
+  ignore:
+  - dependency-name: github.com/bwmarrin/discordgo
+    versions:
+    - 0.23.1
+  - dependency-name: golang.org/x/text
+    versions:
+    - 0.3.5
