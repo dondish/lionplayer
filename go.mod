@@ -6,8 +6,7 @@ require (
 	github.com/ebml-go/ebml v0.0.0-20160925193348-ca8851a10894
 	github.com/gorilla/websocket v1.4.1 // indirect
 	github.com/stretchr/testify v1.4.0
-	golang.org/x/crypto v0.0.0-20191011191535-87dc89f01550 // indirect
-	golang.org/x/text v0.3.2
+	golang.org/x/text v0.3.8
 )
 
 go 1.13
